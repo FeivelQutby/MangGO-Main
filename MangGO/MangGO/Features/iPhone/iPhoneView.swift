@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct WaitingView: View {
+struct iPhoneView: View {
     var body: some View {
         VStack(spacing: 20) {
 
@@ -29,5 +29,5 @@ struct WaitingView: View {
 }
 
 #Preview {
-    WaitingView()
+    iPhoneView()
 }

@@ -12,9 +12,9 @@ struct ContentView: View {
     var body: some View {
 
         if UIDevice.current.userInterfaceIdiom == .pad {
-            DashboardView()
+            iPadView()
         } else {
-            WaitingView()
+            iPhoneView()
         }
 
     }

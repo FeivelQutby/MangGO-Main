@@ -11,11 +11,11 @@ struct DashboardView: View {
     var body: some View {
         VStack {
 
-            Text("Ipad View")
+            Text("Dashboard View")
                 .font(.largeTitle)
                 .bold()
 
-            Text("Waiting for grading result...")
+            Text("Analytics")
         }
         .padding()
     }
