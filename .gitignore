@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# SwiftPM
+.build/
+
+# Arduino
+*.tmp
+*.bak
+
+# VSCode
+.vscode/
+
+# PlatformIO (if you ever use it again)
+.pio/
