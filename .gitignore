@@ -21,3 +21,10 @@ xcuserdata/
 
 # PlatformIO (if you ever use it again)
 .pio/
+
+# ML training
+ml/.venv/
+ml/runs/
+ml/mango-defect-detectionv4-*/
+ml/*.pt
+ml/yolo11*.pt

@@ -2,26 +2,59 @@ import Foundation
 import Vision
 import CoreML
 
-/// Deteksi bintik on-device lewat Core ML.
+/// On-device defect detection.
 ///
-/// Belum aktif: `MangoDefect.mlpackage` belum ada di Resources. Versi model
-/// Roboflow saat ini memakai arsitektur hosted-only, jadi dataset perlu
-/// di-train ulang sebagai YOLOv11n atau RF-DETR-nano lalu di-export ke Core ML.
+/// The model is loaded from the app bundle by name at runtime, so dropping
+/// `MangoDefect.mlpackage` into `Core/Vision/Resources/` activates this detector
+/// without any code change. Until then `detect` throws `.modelUnavailable`.
 ///
-/// Actor, bukan struct, karena `VNCoreMLModel` tidak dijamin aman diakses dari
-/// beberapa thread sekaligus.
+/// An actor because `VNCoreMLModel` is not documented as thread-safe.
 actor CoreMLDefectDetector: DefectDetecting {
+    private let modelName: String
     private let confidenceThreshold: Float
+    private var loadedModel: VNCoreMLModel?
 
-    init(confidenceThreshold: Float = 0.40) {
+    init(modelName: String = "MangoDefect", confidenceThreshold: Float = 0.40) {
+        self.modelName = modelName
         self.confidenceThreshold = confidenceThreshold
     }
 
     func detect(in input: VisionInput) async throws -> [DefectObservation] {
-        throw VisionError.modelUnavailable
+        let model = try loadModel()
+        let handler = try makeHandler(for: input)
+
+        let request = VNCoreMLRequest(model: model)
+        request.imageCropAndScaleOption = .scaleFill
+
+        do {
+            try handler.perform([request])
+        } catch {
+            throw VisionError.inferenceFailed(error)
+        }
+
+        return observations(from: request)
     }
 
-    private func handler(for input: VisionInput) throws -> VNImageRequestHandler {
+    private func loadModel() throws -> VNCoreMLModel {
+        if let loadedModel { return loadedModel }
+
+        guard let url = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc") else {
+            throw VisionError.modelUnavailable
+        }
+
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = .cpuAndNeuralEngine
+
+        do {
+            let model = try VNCoreMLModel(for: MLModel(contentsOf: url, configuration: configuration))
+            loadedModel = model
+            return model
+        } catch {
+            throw VisionError.inferenceFailed(error)
+        }
+    }
+
+    private func makeHandler(for input: VisionInput) throws -> VNImageRequestHandler {
         switch input {
         case .pixelBuffer(let buffer):
             return VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .right)
