@@ -1,228 +1,80 @@
 # MangGO — iOS App
 
-Aplikasi SwiftUI untuk sistem grading mangga Harum Manis. Satu app target yang melayani dua peran:
+SwiftUI app for the Harum Manis mango grading box.
 
-- **iPhone** — diletakkan di dalam grading box. Menangkap gambar, menjalankan Computer Vision, membaca sensor lewat BLE.
-- **iPad** — display utama untuk worker & manager. Menampilkan hasil grading dan analitik batch.
+One target, two roles. The iPhone sits inside the box and runs the camera and on-device CV. The iPad is the display. `ContentView` picks the right view from `userInterfaceIdiom`.
 
-Pemilihan tampilan dilakukan otomatis di `ContentView` berdasarkan `UIDevice.current.userInterfaceIdiom`.
+**Current phase:** iPhone CV pipeline. BLE, iPad connectivity, and Firebase are not built yet.
 
-> **Fase saat ini:** prototype Computer Vision di iPhone. Fitur iPad, BLE, dan sinkronisasi Firebase masih berupa placeholder.
-
----
-
-## Struktur Direktori
+## Structure
 
 ```
 MangGO/MangGO/
-├── App/                    # Entry point & state global
-├── Core/                   # Semua logika — tanpa SwiftUI View
-│   ├── Models/
-│   ├── Capture/
-│   ├── Vision/
-│   └── Grading/
-├── Features/               # Semua UI
-│   ├── iPhone/
-│   └── iPad/
+├── App/                 Entry point, idiom router
+├── Core/                Logic only — no feature views
+│   ├── Models/          Value types: MangoSample, Grade, GradeResult, …
+│   ├── Grading/         Rules engine and thresholds
+│   ├── Vision/          Defect detection and fruit segmentation
+│   └── Capture/         AVFoundation camera
+├── Features/
+│   ├── iPhone/          Capture UI
+│   └── iPad/            Placeholder
 └── Assets.xcassets/
 ```
 
----
+**Dependency rule:** `Features → Core`, one way. `Core` never imports `Features`. This is what makes moving the UI to iPad cheap later — the iPad gets new views over the same `Core`.
 
-## Aturan Dependensi
+`CameraPreviewView` is the one view inside `Core`. It is a `UIViewRepresentable` bridge to AVFoundation, not feature UI.
 
-Ini aturan terpenting di project ini:
+## Grading
 
-```
-Features  ──►  Core  ──►  Foundation / Vision / AVFoundation
-```
+`GradingEngine` runs a list of independent criteria. Each returns one `Grade`; the final grade is the worst of them. Criteria with missing data are skipped, so partial grading works while measurements are still coming in.
 
-**Satu arah.** `Features` boleh mengimpor `Core`. `Core` **tidak pernah** mengimpor `Features`, dan tidak pernah mengimpor SwiftUI View apa pun.
+Thresholds live in `GradingStandard.harumManis` as data, not `if` statements. Bands are checked best-grade-first, so a value on a boundary lands in the better grade, and anything outside every band becomes `rejected`.
 
-Kenapa: karena UI final nanti pindah ke iPad. Kalau `Core` bersih dari View, memindahkan UI cukup dengan menulis View baru di atas `Core` yang sama persis — tidak ada logika yang perlu ditulis ulang. Kalau logika bocor ke dalam View, migrasi ke iPad berarti tulis ulang.
+Adding an indicator means adding one `MetricCriterion` entry — no changes to the engine.
 
-Cara cepat mengecek: kalau ada file di `Core/` yang punya baris `import SwiftUI` untuk mendefinisikan `View`, itu salah tempat. (`CameraPreviewView` adalah pengecualian sah — dia `UIViewRepresentable`, jembatan ke AVFoundation, bukan UI fitur.)
+| Indicator | A | B | C | Source |
+|---|---|---|---|---|
+| Spots (% of surface) | 0–5 | 5–15 | 15–30 | Core ML + segmentation |
+| Blush (%) | 15–40 | 5–15 | 0.5–5 | Color analysis |
+| Hue | 15–33 | 33–43 | 43–55 | Color analysis |
+| Saturation | 76–255 | 64–76 | — | Color analysis |
+| Brightness | 178–255 | 128–178 | 64–128 | Color analysis |
+| Mass (g) | >400 | 351–400 | <351 | Load cell over BLE |
+| Volume (cm³) | 350–550 | 280–350 | 200–280 | Camera + ToF |
 
----
+HSV uses the OpenCV convention: H 0–179, S and V 0–255.
 
-## Penjelasan Tiap Folder
+Spot coverage is measured against the fruit silhouette, not the frame, so `FruitSegmenting` must be real before the number means anything.
 
-### `App/`
+### Open questions
 
-Entry point aplikasi dan state yang dipakai lintas fitur.
+The source table has gaps. Current interpretation:
 
-| File | Fungsi |
-|---|---|
-| `MangGO_qApp.swift` | `@main`, mendefinisikan `WindowGroup` |
-| `ContentView.swift` | Router: memilih `iPhoneView` atau `iPadView` berdasarkan device idiom |
-| `AppState.swift` | `@Observable` root state — status koneksi, sesi batch yang sedang berjalan |
+- Hue Grade A was written `33 ≤ H ≤ 33`; read as `15 ≤ H ≤ 33`
+- Hue 55–58 → `rejected`
+- Saturation 64–76 → `B`
+- Blush > 40% → `rejected`
+- "Not standardized in shape and size" is not implemented
 
-Folder ini sengaja tipis. Kalau isinya mulai membengkak, biasanya tanda ada logika yang seharusnya turun ke `Core/`.
+## CV model
 
-### `Core/Models/`
+[mangotest/mango-defect-detectionv4](https://universe.roboflow.com/mangotest/mango-defect-detectionv4), CC BY 4.0. One class (`defect`), mAP@50 38.2%, 401 images. Good enough to validate the pipeline, not to calibrate thresholds.
 
-Value type murni: `struct` dan `enum`, `Codable`, tanpa logika dan tanpa dependensi framework.
+The current Roboflow 3.0 architecture is hosted-only. Retrain the dataset as YOLOv11n or RF-DETR-nano, export to `.mlpackage`, and drop it in `Core/Vision/Resources/`.
 
-| File | Isi |
-|---|---|
-| `MangoSample.swift` | Satu buah mangga yang sedang/sudah diproses. Kumpulan semua hasil pengukuran |
-| `DefectObservation.swift` | Satu bounding box hasil deteksi: posisi, ukuran, confidence |
-| `Dimensions.swift` | Panjang, lebar (kamera) + tinggi (ToF). `volume` dihitung sebagai computed property |
-| `Grade.swift` | `enum` — A, B, C, Reject |
-| `GradeResult.swift` | Grade final + alasan/rincian kenapa dapat grade itu |
+Blush is not an output of this model. It needs a separate color path.
 
-**Dua prinsip di folder ini:**
+## Development
 
-1. **Nilai turunan ditulis sebagai `computed property`, bukan disimpan.** `volume` diturunkan dari p×l×t; `defectAreaRatio` diturunkan dari bbox. Menyimpannya berarti suatu saat ada bug di mana sumbernya berubah tapi turunannya basi.
+Everything runs without a camera or a model. `MockDefectDetector` and `MockFruitSegmenter` are the defaults, so every screen works in Xcode Previews and the Simulator.
 
-2. **`MangoSample` menyimpan fakta, `GradeResult` menyimpan interpretasi.** Keduanya terpisah. Kalau aturan grading berubah, grade semua data lama bisa dihitung ulang tanpa mengukur ulang buahnya.
+- Xcode 26+, iOS 26.5 deployment target
+- Camera permission is a build setting (`INFOPLIST_KEY_NSCameraUsageDescription`), not an Info.plist file
+- Synchronized folder groups: new folders in Finder are picked up automatically
+- Real camera testing needs a physical device
 
-Field pengukuran dibuat `Optional` karena grading berlangsung bertahap — saat scan sisi 1, `weight` memang belum ada. Optional membuat kondisi "belum terisi" terwakili jujur di tipe data, bukan disamarkan jadi `0`.
+## Not built yet
 
-### `Core/Capture/`
-
-Semua yang berurusan dengan `AVFoundation`. Tugasnya hanya menghasilkan frame — tidak tahu apa pun tentang mangga.
-
-| File | Fungsi |
-|---|---|
-| `CameraSession.swift` | Wrapper `AVCaptureSession`: konfigurasi, izin, lifecycle, output frame |
-| `CameraPreviewView.swift` | `UIViewRepresentable` yang membungkus `AVCaptureVideoPreviewLayer` |
-
-### `Core/Vision/`
-
-Mengubah frame gambar menjadi observasi. Ini rumah dari model Core ML.
-
-| File | Fungsi |
-|---|---|
-| `DefectDetecting.swift` | **Protocol.** Kontrak: terima gambar, kembalikan `[DefectObservation]` |
-| `CoreMLDefectDetector.swift` | Implementasi nyata via `VNCoreMLRequest` |
-| `MockDefectDetector.swift` | Implementasi palsu yang mengembalikan data statis |
-| `Resources/MangoDefect.mlpackage` | Model hasil export dari Roboflow |
-
-**Kenapa ada protocol dan mock:** kamera tidak berfungsi di Simulator maupun Xcode Preview. Tanpa mock, setiap perubahan kecil di UI harus di-deploy ke iPhone fisik dulu untuk dilihat hasilnya. Mock membuat `CaptureView` bisa di-preview dengan data deteksi palsu. Ini bukan pertimbangan teoretis — akan terasa di hari pertama.
-
-Bonus: kalau nanti model diganti (misalnya YOLOv11n → RF-DETR), yang berubah hanya satu file implementasi. UI tidak tersentuh.
-
-Nanti folder ini juga akan diisi `ColorAnalyzer.swift` dan `SizeEstimator.swift`.
-
-### `Core/Grading/`
-
-*(Belum dibuat — lihat bagian Roadmap.)*
-
-Menggabungkan semua sinyal menjadi satu keputusan.
-
-| File | Fungsi |
-|---|---|
-| `GradingEngine.swift` | Fungsi murni: masuk `MangoSample`, keluar `GradeResult` |
-| `GradingRules.swift` | Kumpulan angka threshold, terpisah dari logika pembandingnya |
-
-Engine tidak tahu kamera, tidak tahu BLE, tidak tahu SwiftUI. Konsekuensinya bisa di-unit-test penuh tanpa hardware: bikin sample palsu di test, pastikan grade-nya benar. Ini penting karena aturan grading pasti berubah berkali-kali setelah diuji di pack house.
-
-Threshold dipisah ke file sendiri supaya mengubah aturan = mengubah angka, bukan mengubah kode.
-
-### `Features/iPhone/`
-
-UI untuk perangkat di dalam box.
-
-| Path | Fungsi |
-|---|---|
-| `iPhoneView.swift` | Layar utama: status koneksi, entry ke mode capture |
-| `Capture/CaptureView.swift` | Live preview kamera + kontrol |
-| `Capture/CaptureViewModel.swift` | `@Observable`. Mengorkestrasi capture → detect → update state |
-| `Capture/DetectionOverlay.swift` | Menggambar bounding box di atas preview |
-
-`CaptureViewModel` adalah satu-satunya tempat yang menyatukan `CameraSession` dan `DefectDetecting`. View di bawahnya hanya membaca state — tidak ada View yang memanggil detector langsung.
-
-### `Features/iPad/`
-
-UI untuk display utama. Masih placeholder.
-
-| File | Fungsi |
-|---|---|
-| `iPadView.swift` | Shell dengan segmented picker: Grading / Dashboard |
-| `GradingView.swift` | Menampilkan proses & hasil grading berjalan |
-| `DashboardView.swift` | Analitik batch, daftar buah yang di-reject |
-
----
-
-## Alur Data
-
-```
-                      ┌─ DefectDetector ──┐
-CameraSession ──frame─┤                   │
-                      └─ ColorAnalyzer ───┤
-                                          ├──► MangoSample ──► GradingEngine ──► GradeResult
-                         SizeEstimator ───┤       (fakta)         (aturan)        (keputusan)
-                                          │
-                         BLEService ──────┘
-                    (weight, height dari ESP32)
-```
-
-`MangoSample` adalah titik temu semua sinyal — dan ini disengaja: **batas antara CV dan UI adalah batas yang sama dengan batas antara iPhone dan iPad.** Objek `Codable` yang hari ini dibaca `CaptureView` di iPhone, nanti tinggal dikirim lewat kabel ke iPad tanpa perubahan bentuk.
-
----
-
-## Roadmap Folder
-
-| Folder | Status | Menunggu |
-|---|---|---|
-| `Core/Models/` | 🔨 sekarang | — |
-| `Core/Capture/` | 🔨 sekarang | — |
-| `Core/Vision/` | 🔨 sekarang | — |
-| `Core/Grading/` | ⏸ ditunda | minimal 2 sinyal nyata (defect + weight) |
-| `Core/Bluetooth/` | ⏸ ditunda | firmware ESP32 punya BLE peripheral |
-| `Core/Connectivity/` | ⏸ ditunda | pipeline CV iPhone stabil |
-| `Core/Persistence/` | ⏸ ditunda | grading loop lengkap; lalu tambah Firebase via SPM |
-| `DesignSystem/` | ⏸ ditunda | UI final dipindah ke iPad |
-
-`Core/Grading/` ditunda bukan karena tidak penting, tapi karena rule engine dengan satu input hanya akan jadi `if defect > x` yang pasti dibuang begitu weight masuk.
-
----
-
-## Konvensi
-
-**Menambah file.** Project ini memakai `objectVersion = 77` dengan *synchronized folder groups* — folder yang dibuat di Finder otomatis terbaca Xcode. Tidak perlu drag-and-drop manual, dan `project.pbxproj` tidak ikut berubah (artinya jauh lebih sedikit merge conflict).
-
-**Izin kamera.** Build setting `GENERATE_INFOPLIST_FILE = YES`, jadi tidak ada file `Info.plist`. Izin ditambahkan lewat Build Settings sebagai `INFOPLIST_KEY_NSCameraUsageDescription`.
-
-**State management.** `@Observable` (bukan `ObservableObject`). Satu ViewModel per layar, ditaruh bersebelahan dengan View-nya di dalam `Features/`.
-
-**Penamaan.** Protocol pakai bentuk `-ing` atau `-able` (`DefectDetecting`), implementasinya menyebut teknologinya (`CoreMLDefectDetector`, `MockDefectDetector`).
-
----
-
-## Catatan Model CV
-
-Model defect detection berasal dari [Roboflow Universe: mango-defect-detectionv4](https://universe.roboflow.com/mangotest/mango-defect-detectionv4) (CC BY 4.0).
-
-Tiga hal yang perlu diketahui sebelum mengandalkan model ini:
-
-**Hanya 1 kelas: `defect`.** Blush (semburat merah penanda ripeness) **bukan** output model ini — itu sinyal warna dan butuh jalur analisis terpisah.
-
-**Metrik masih rendah.** mAP@50 38.2%, precision 43.6%, recall 42.0%, dataset 401 gambar. Cukup untuk memvalidasi bahwa pipeline berjalan, **tidak cukup** untuk mengkalibrasi threshold grading. Jangan menyetel aturan grading berdasarkan output model versi ini.
-
-**Perlu re-train untuk Core ML.** Versi yang ter-train saat ini memakai arsitektur "Roboflow 3.0 Object Detection (Fast)" yang khusus hosted API dan tidak punya jalur export Core ML. Untuk on-device, dataset yang sama perlu di-train ulang sebagai **YOLOv11n** atau **RF-DETR-nano**, lalu di-export ke `.mlpackage`.
-
-Karena output model adalah bounding box (bukan sekadar label), sinyal grading yang sebenarnya berguna adalah **geometri**-nya: jumlah bercak, rasio luas defect terhadap luas buah, dan posisi bercak. Itu yang masuk ke `GradingEngine`, bukan label mentahnya.
-
----
-
-## Indikator Grading
-
-| Indikator | Sumber | Status |
-|---|---|---|
-| Defect | Core ML (Roboflow) — dari bbox | 🔨 dikerjakan |
-| Color / Blush | Analisis warna kamera | ❓ masih eksplorasi |
-| Size (p × l) | Kamera | ⏸ belum |
-| Height | Sensor ToF (VL53L0X) via ESP32 | ⏸ belum |
-| Weight | Load cell + HX711 via ESP32 | ⏸ belum |
-
-Untuk pengukuran size: karena interior box tetap dan geometrinya diketahui, kalibrasi piksel→mm dengan objek referensi berukuran pasti akan lebih akurat sekaligus lebih murah daripada memakai ARKit.
-
----
-
-## Requirements
-
-- Xcode 26+
-- iOS 26.5+ (`IPHONEOS_DEPLOYMENT_TARGET` — cukup tinggi, membatasi pilihan device untuk testing; pertimbangkan diturunkan)
-- Device fisik untuk semua pengujian kamera — Simulator tidak punya kamera
+Core ML model · real fruit segmentation · color analysis · BLE (mass, height) · pixel-to-mm calibration · iPad connectivity · Firebase sync · test target

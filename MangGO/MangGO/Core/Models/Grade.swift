@@ -1,8 +1,31 @@
-//
-//  Grade.swift
-//  MangGO
-//
-//  Created by Rizki Hidayatul Laeli on 10/08/26.
-//
+import Foundation
 
-// enum A/B/C/Reject, placeholder
+enum Grade: String, Codable, CaseIterable, Sendable {
+    case a
+    case b
+    case c
+    case rejected
+
+    var displayName: String {
+        switch self {
+        case .a: "Grade A"
+        case .b: "Grade B"
+        case .c: "Grade C"
+        case .rejected: "Rejected"
+        }
+    }
+
+    /// Makin kecil makin baik.
+    var rank: Int {
+        switch self {
+        case .a: 0
+        case .b: 1
+        case .c: 2
+        case .rejected: 3
+        }
+    }
+
+    static func worst(_ lhs: Grade, _ rhs: Grade) -> Grade {
+        lhs.rank >= rhs.rank ? lhs : rhs
+    }
+}

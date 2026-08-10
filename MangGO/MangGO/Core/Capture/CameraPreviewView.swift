@@ -1,8 +1,23 @@
-//
-//  CameraPreviewView.swift
-//  MangGO
-//
-//  Created by Rizki Hidayatul Laeli on 10/08/26.
-//
+import SwiftUI
+import AVFoundation
 
-// UIViewRepresentable preview layer
+struct CameraPreviewView: UIViewRepresentable {
+    let session: AVCaptureSession
+
+    func makeUIView(context: Context) -> PreviewView {
+        let view = PreviewView()
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
+        return view
+    }
+
+    func updateUIView(_ uiView: PreviewView, context: Context) {}
+
+    final class PreviewView: UIView {
+        override static var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            layer as! AVCaptureVideoPreviewLayer
+        }
+    }
+}

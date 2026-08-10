@@ -1,30 +1,32 @@
-//
-//  WaitingView.swift
-//  MangGO-q
-//
-//  Created by Feivel Qutby on 07/08/26.
-//
-
 import SwiftUI
 
 struct iPhoneView: View {
     var body: some View {
-        VStack(spacing: 20) {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Text("MangGO")
+                    .font(.largeTitle.bold())
 
-            Text("Iphone App")
-                .font(.largeTitle)
-                .bold()
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("ESP32", systemImage: "dot.radiowaves.left.and.right")
+                    Label("iPad", systemImage: "ipad")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
-            Text("ESP32 Connected")
-                .foregroundStyle(.green)
+                Spacer()
 
-            Text("iPhone Connected")
-                .foregroundStyle(.green)
-
-            Toggle("Show Camera", isOn: .constant(false))
-                .padding(.horizontal)
+                NavigationLink {
+                    CaptureView()
+                } label: {
+                    Label("Mulai Capture", systemImage: "camera.viewfinder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            .padding()
         }
-        .padding()
     }
 }
 
