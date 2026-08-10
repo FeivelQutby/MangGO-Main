@@ -17,7 +17,7 @@ struct iPhoneView: View {
                 Spacer()
 
                 NavigationLink {
-                    CaptureView()
+                    CaptureView(model: CaptureViewModel(detector: CoreMLDefectDetector()))
                 } label: {
                     Label("Mulai Capture", systemImage: "camera.viewfinder")
                         .frame(maxWidth: .infinity)
