@@ -1,36 +1,22 @@
 //
 //  ContentView.swift
-//  MangGO
+//  MangGO-q
+//
+//  Created by Feivel Qutby on 06/08/26.
 //
 
 import SwiftUI
 
-/// Satu binary, dua peran. iPhone jadi station (kamera + inferensi + ESP32),
-/// iPad jadi display. Peran dipilih dari idiom device, bukan dari toggle di UI,
-/// supaya tidak ada cara untuk salah setel di lantai pabrik.
 struct ContentView: View {
 
-    private let isDisplay: Bool
-
-    @State private var sync: StationSync
-
-    init() {
-        let display = UIDevice.current.userInterfaceIdiom == .pad
-        self.isDisplay = display
-        _sync = State(initialValue: StationSync(role: display ? .display : .station))
-    }
-
     var body: some View {
-        Group {
-            if isDisplay {
-                iPadView()
-            } else {
-                iPhoneView()
-            }
+
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            iPadView()
+        } else {
+            iPhoneView()
         }
-        .environment(sync)
-        // `start()` idempoten, jadi aman kalau onAppear terpanggil lebih dari sekali.
-        .onAppear { sync.start() }
+
     }
 }
 
