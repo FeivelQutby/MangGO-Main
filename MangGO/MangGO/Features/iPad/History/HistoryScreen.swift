@@ -8,7 +8,7 @@ import Charts
 
 /// Filter rentang waktu untuk Riwayat
 enum DateRangeFilter: String, CaseIterable, Identifiable {
-    case today = "Hari Ini"
+    case today = "Hari Esok"
     case last7 = "7 Hari Terakhir"
     case last14 = "14 Hari Terakhir"
     case last30 = "30 Hari Terakhir"
