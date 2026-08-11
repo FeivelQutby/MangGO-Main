@@ -29,3 +29,16 @@ enum Grade: String, Codable, CaseIterable, Sendable {
         lhs.rank >= rhs.rank ? lhs : rhs
     }
 }
+
+extension Grade {
+    /// Kode yang dikirim ke iPad lewat `StationSnapshot.Result.grade`.
+    /// Harus cocok persis dengan `GradeDisplay.rawValue`.
+    var displayCode: String {
+        switch self {
+        case .a: "A"
+        case .b: "B"
+        case .c: "C"
+        case .rejected: "Reject"
+        }
+    }
+}
