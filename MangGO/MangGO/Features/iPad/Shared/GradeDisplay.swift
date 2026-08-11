@@ -5,9 +5,9 @@
 //  Created by Rizki Hidayatul Laeli on 11/08/26.
 //
 
-
 import SwiftUI
 
+/// Representasi visual grade di layar iPad — warna dan judul besar.
 enum GradeDisplay: String, CaseIterable, Identifiable {
     case a = "A"
     case b = "B"
@@ -27,5 +27,15 @@ enum GradeDisplay: String, CaseIterable, Identifiable {
 
     var headline: String {
         self == .reject ? "REJECT" : "GRADE \(rawValue)"
+    }
+}
+
+extension StationSnapshot {
+
+    /// Grade buah yang baru saja selesai dinilai, atau `nil` kalau alat masih
+    /// bekerja / belum ada hasil. Dipakai untuk memicu overlay hasil.
+    var completedGrade: GradeDisplay? {
+        guard phase == .done, let raw = lastResult?.grade else { return nil }
+        return GradeDisplay(rawValue: raw)
     }
 }
