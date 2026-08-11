@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+/// Shell layar iPad: hanya mengurus pemilihan tab dan overlay hasil.
+/// Isi tiap tab ada di `Grading/GradingScreen.swift` dan
+/// `Dashboard/DashboardScreen.swift`.
 struct iPadView: View {
 
     enum Tab: String, CaseIterable { case grading = "Grading", dashboard = "Dashboard" }
@@ -17,9 +20,7 @@ struct iPadView: View {
     private var snapshot: StationSnapshot { sync.snapshot }
 
     private var finishedGrade: GradeDisplay? {
-        guard sync.isLinked, snapshot.phase == .done,
-              let raw = snapshot.lastResult?.grade else { return nil }
-        return GradeDisplay(rawValue: raw)
+        sync.isLinked ? snapshot.completedGrade : nil
     }
 
     var body: some View {
@@ -53,15 +54,9 @@ struct iPadView: View {
         case .dashboard:
             DashboardScreen(snapshot: snapshot)
         case .grading:
-            // Link putus lebih penting daripada state terakhir: angka basi di
-            // lantai pabrik lebih berbahaya daripada layar kosong.
-            if !sync.isLinked {
-                DisconnectedScreen(message: sync.lastError)
-            } else if snapshot.phase.isWorking {
-                ScanningScreen(phase: snapshot.phase)
-            } else {
-                IdleScreen(sensors: snapshot.sensors)
-            }
+            GradingScreen(snapshot: snapshot,
+                          isLinked: sync.isLinked,
+                          connectionError: sync.lastError)
         }
     }
 }

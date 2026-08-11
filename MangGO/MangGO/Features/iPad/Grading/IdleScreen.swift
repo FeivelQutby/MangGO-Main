@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+/// Layar tunggu: status sensor + instruksi tiga langkah untuk operator.
 struct IdleScreen: View {
 
     let sensors: StationSnapshot.Sensors
@@ -48,6 +49,8 @@ struct IdleScreen: View {
     }
 }
 
+/// Baris sensor versi lebar — dipakai hanya di IdleScreen, di mana ada ruang
+/// untuk menuliskan status secara eksplisit.
 private struct SensorChip: View {
 
     let icon: String
@@ -65,33 +68,17 @@ private struct SensorChip: View {
             Image(systemName: icon).foregroundStyle(.secondary)
             Text(name).font(.headline)
             Spacer(minLength: 24)
-            Text(label)
+            Text(state.label)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(color)
+                .foregroundStyle(state.color)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .background(color.opacity(0.15), in: .capsule)
+                .background(state.color.opacity(0.15), in: .capsule)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(width: 300)
         .background(Color(.systemBackground), in: .rect(cornerRadius: 14))
-    }
-
-    private var label: String {
-        switch state {
-        case .ready: "Ready"
-        case .waiting: "Waiting..."
-        case .offline: "Not Ready"
-        }
-    }
-
-    private var color: Color {
-        switch state {
-        case .ready: .green
-        case .waiting: .orange
-        case .offline: .red
-        }
     }
 }
 
@@ -122,6 +109,4 @@ private struct StepCard: View {
     }
 }
 
-#Preview {
-    IdleScreen(sensors: .allReady)
-}
+#Preview { IdleScreen(sensors: .allReady) }
