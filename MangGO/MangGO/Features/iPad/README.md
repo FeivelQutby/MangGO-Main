@@ -174,3 +174,5 @@ Sebelum ubah file di luar `Features/iPad/`, ngobrol dulu — `Core/` dipakai
 bareng sama sisi iPhone, jadi perubahan di situ gampang bikin orang lain
 ke-block. Nambah field di `StationSnapshot` khususnya harus disepakati dua
 sisi, karena yang ngisi field-nya iPhone.
+
+wassalamualaikum wr wb
