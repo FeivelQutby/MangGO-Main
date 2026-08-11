@@ -32,3 +32,4 @@ ml/yolo11*.pt
 # Antigravity local agent configs
 .agents/
 
+.DS_Store
