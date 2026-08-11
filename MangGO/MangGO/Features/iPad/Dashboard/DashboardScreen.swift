@@ -13,6 +13,7 @@ import SwiftUI
 struct DashboardScreen: View {
 
     // desain nya bisa di sini beb
+    // .
     
     let snapshot: StationSnapshot
 
