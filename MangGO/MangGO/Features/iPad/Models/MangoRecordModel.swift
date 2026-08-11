@@ -36,6 +36,19 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
         self.defectPercent = defectPercent
         self.rejectionReason = rejectionReason
     }
+
+    var formattedCode: String {
+        let suffix = abs(id.uuidString.hashValue % 900) + 100
+        return "R48-\(suffix)"
+    }
+
+    var weightStatus: String {
+        weightGrams >= 351 ? "memenuhi standar" : "tidak memenuhi standar"
+    }
+
+    var defectStatus: String {
+        defectPercent > 15 ? "defect tinggi" : "defect normal"
+    }
 }
 
 /// Helper data dummy untuk visualisasi dashboard & riwayat (30 hari terakhir).

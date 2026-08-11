@@ -2,13 +2,14 @@
 //  RecentScreen.swift
 //  MangGO
 //
-//  Created from Figma Node 434:535
+//  Created from Figma Node 434:535 & 2nd Iteration Specs
 //
 
 import SwiftUI
 import Charts
 
-/// Tampilan "Hasil Terbaru" (Recent Batch / Today's Summary) sesuai desain Figma 434:535.
+/// Tampilan "Hasil Terbaru" (Recent Batch / Today's Summary)
+/// Iterasi 2: Layout 2 Kolom (Kiri: Stack Cards Total & Reject | Kanan: 2 Bar Charts + Tabel 4 Kolom)
 struct RecentScreen: View {
 
     let records: [MangoRecord]
@@ -46,7 +47,7 @@ struct RecentScreen: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 // Header Tanggal
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -59,84 +60,99 @@ struct RecentScreen: View {
                     Spacer()
                 }
 
-                // Row Top Summary Cards
-                HStack(spacing: 16) {
-                    // Card 1: Total Buah
-                    SummaryTileCard(
-                        title: "Total Buah",
-                        value: "\(totalCount.formatted()) buah",
-                        icon: "🥭",
-                        trend: "+ 12,3% dari Batch sebelumnya",
-                        isPositive: true
-                    )
+                // Split Layout 2 Kolom
+                HStack(alignment: .top, spacing: 24) {
+                    // ==========================================
+                    // KOLOM KIRI: 3 Card Stacked Vertikal (Width: 320)
+                    // ==========================================
+                    VStack(spacing: 16) {
+                        // Card 1: Total Buah
+                        MetricSummaryCard(
+                            title: "Total Buah",
+                            value: "\(totalCount.formatted()) buah",
+                            icon: "🥭",
+                            trend: "+ 12,3% dari Batch sebelumnya",
+                            isPositive: true
+                        )
 
-                    // Card 2: Total Berat
-                    SummaryTileCard(
-                        title: "Total Berat Mangga",
-                        value: String(format: "%.1f kg", totalWeightKg),
-                        icon: "⚖️",
-                        trend: "+ 9,6% dari Batch sebelumnya",
-                        isPositive: true
-                    )
+                        // Card 2: Total Berat
+                        MetricSummaryCard(
+                            title: "Total Berat Mangga",
+                            value: String(format: "%.1f kg", totalWeightKg),
+                            icon: "⚖️",
+                            trend: "+ 9,6% dari Batch sebelumnya",
+                            isPositive: true
+                        )
 
-                    // Card 3: Rasio Grade
-                    GradeRatioCard(
-                        gradeAPercent: percentage(for: .a),
-                        gradeBPercent: percentage(for: .b),
-                        gradeCPercent: percentage(for: .c),
-                        rejectPercent: percentage(for: .reject)
-                    )
-                }
+                        // Card 3: Mangga Ter-Reject + Tombol "Periksa"
+                        RejectedSummaryCard(
+                            count: count(for: .reject),
+                            percentage: percentage(for: .reject),
+                            onPeriksa: { showingRejectedList = true }
+                        )
+                    }
+                    .frame(width: 320)
 
-                Text("Hasil Grading Detail")
-                    .font(.title2.bold())
-                    .padding(.top, 8)
+                    // ==========================================
+                    // KOLOM KANAN: 2 Bar Charts + Tabel 4 Kolom
+                    // ==========================================
+                    VStack(spacing: 20) {
+                        // Top Section: 2 Bar Charts Berdampingan
+                        HStack(spacing: 16) {
+                            // Chart 1: Jumlah per Grade
+                            ChartContainerCard(title: "Jumlah per Grade") {
+                                Chart {
+                                    ForEach(GradeDisplay.allCases) { grade in
+                                        BarMark(
+                                            x: .value("Grade", "Grade \(grade.rawValue)"),
+                                            y: .value("Jumlah", count(for: grade))
+                                        )
+                                        .foregroundStyle(grade.color)
+                                    }
+                                }
+                                .chartYAxisLabel("Buah")
+                            }
 
-                // Grid 4 Card Hasil Grading (A, B, C, Reject)
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    GradeDetailCard(
-                        grade: .a,
-                        count: count(for: .a),
-                        weightKg: weightKg(for: .a),
-                        trend: "+ 12,3% dari Batch sebelumnya"
-                    )
+                            // Chart 2: Total Berat per Grade
+                            ChartContainerCard(title: "Total Berat per Grade") {
+                                Chart {
+                                    ForEach(GradeDisplay.allCases) { grade in
+                                        BarMark(
+                                            x: .value("Grade", "Grade \(grade.rawValue)"),
+                                            y: .value("Berat", weightKg(for: grade))
+                                        )
+                                        .foregroundStyle(grade.color)
+                                    }
+                                }
+                                .chartYAxisLabel("kg")
+                            }
+                        }
 
-                    GradeDetailCard(
-                        grade: .b,
-                        count: count(for: .b),
-                        weightKg: weightKg(for: .b),
-                        trend: "+ 12,3% dari Batch sebelumnya"
-                    )
-
-                    GradeDetailCard(
-                        grade: .c,
-                        count: count(for: .c),
-                        weightKg: weightKg(for: .c),
-                        trend: "+ 12,3% dari Batch sebelumnya"
-                    )
-
-                    GradeDetailCard(
-                        grade: .reject,
-                        count: count(for: .reject),
-                        weightKg: weightKg(for: .reject),
-                        trend: "+ 12,3% dari Batch sebelumnya",
-                        actionTitle: "Periksa",
-                        onAction: { showingRejectedList = true }
-                    )
+                        // Bottom Section: Tabel Ringkasan 4 Kolom
+                        GradeSummaryTableView(
+                            records: todayRecords,
+                            totalCount: totalCount,
+                            countForGrade: { count(for: $0) },
+                            weightForGrade: { weightKg(for: $0) },
+                            percentageForGrade: { percentage(for: $0) }
+                        )
+                    }
                 }
             }
             .padding(24)
         }
         .background(Color(.systemGroupedBackground))
         .sheet(isPresented: $showingRejectedList) {
-            RejectedMangoSheet(records: todayRecords.filter { $0.grade == .reject })
+            RejectedMangoListView(
+                rejectedRecords: todayRecords.filter { $0.grade == .reject }
+            )
         }
     }
 }
 
 // MARK: - Subcomponents
 
-private struct SummaryTileCard: View {
+private struct MetricSummaryCard: View {
     let title: String
     let value: String
     let icon: String
@@ -144,11 +160,11 @@ private struct SummaryTileCard: View {
     let isPositive: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text(icon).font(.title2)
                 Text(value)
-                    .font(.title.bold())
+                    .font(.title2.bold())
             }
             Text(title)
                 .font(.subheadline)
@@ -166,182 +182,133 @@ private struct SummaryTileCard: View {
             .padding(.vertical, 4)
             .background(isPositive ? Color.green.opacity(0.12) : Color.red.opacity(0.12), in: .capsule)
         }
-        .padding(20)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
     }
 }
 
-private struct GradeRatioCard: View {
-    let gradeAPercent: Double
-    let gradeBPercent: Double
-    let gradeCPercent: Double
-    let rejectPercent: Double
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Rasio Grade")
-                .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 16) {
-                // Circular Progress Donut Chart
-                ZStack {
-                    Circle()
-                        .stroke(GradeDisplay.reject.color, lineWidth: 12)
-                    Circle()
-                        .trim(from: 0, to: CGFloat((gradeAPercent + gradeBPercent + gradeCPercent) / 100))
-                        .stroke(GradeDisplay.c.color, lineWidth: 12)
-                    Circle()
-                        .trim(from: 0, to: CGFloat((gradeAPercent + gradeBPercent) / 100))
-                        .stroke(GradeDisplay.b.color, lineWidth: 12)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(gradeAPercent / 100))
-                        .stroke(GradeDisplay.a.color, lineWidth: 12)
-                }
-                .rotationEffect(.degrees(-90))
-                .frame(width: 80, height: 80)
-
-                // Legend Grid
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        LegendDot(color: GradeDisplay.a.color)
-                        Text("Grade A: ").font(.caption) + Text("\(Int(gradeAPercent))%").font(.caption.bold())
-                    }
-                    HStack {
-                        LegendDot(color: GradeDisplay.b.color)
-                        Text("Grade B: ").font(.caption) + Text("\(Int(gradeBPercent))%").font(.caption.bold())
-                    }
-                    HStack {
-                        LegendDot(color: GradeDisplay.c.color)
-                        Text("Grade C: ").font(.caption) + Text("\(Int(gradeCPercent))%").font(.caption.bold())
-                    }
-                    HStack {
-                        LegendDot(color: GradeDisplay.reject.color)
-                        Text("Reject: ").font(.caption) + Text("\(Int(rejectPercent))%").font(.caption.bold())
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
-    }
-}
-
-private struct LegendDot: View {
-    let color: Color
-    var body: some View {
-        Circle().fill(color).frame(width: 8, height: 8)
-    }
-}
-
-private struct GradeDetailCard: View {
-    let grade: GradeDisplay
+private struct RejectedSummaryCard: View {
     let count: Int
-    let weightKg: Double
-    let trend: String
-    var actionTitle: String? = nil
-    var onAction: (() -> Void)? = nil
+    let percentage: Double
+    let onPeriksa: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Grade \(grade.rawValue)")
-                    .font(.headline.bold())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(grade.color.opacity(0.2))
-                    .foregroundStyle(grade == .c ? Color.black : grade.color)
-                    .clipShape(Capsule())
-
-                Spacer()
-
-                if let actionTitle, let onAction {
-                    Button(action: onAction) {
-                        Text(actionTitle)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.accentColor, in: .capsule)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Text("🚫").font(.title2)
+                Text("\(count.formatted()) buah")
+                    .font(.title2.bold())
+                    .foregroundStyle(GradeDisplay.reject.color)
             }
 
-            HStack(spacing: 24) {
-                HStack(spacing: 6) {
-                    Text("🥭")
-                    Text("\(count.formatted()) buah")
-                        .font(.title3.bold())
-                }
-                .padding(10)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
-
-                HStack(spacing: 6) {
-                    Text("⚖️")
-                    Text(String(format: "%.1f kg", weightKg))
-                        .font(.title3.bold())
-                }
-                .padding(10)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
-            }
-
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.up.forward")
-                    .font(.caption.bold())
-                    .foregroundStyle(.green)
-                Text(trend)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Mangga Ter-Reject Hari Ini")
+                    .font(.subheadline.bold())
+                Text("Rasio Reject: \(String(format: "%.1f%%", percentage)) dari total")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Button(action: onPeriksa) {
+                HStack {
+                    Text("Periksa")
+                        .font(.subheadline.bold())
+                    Image(systemName: "arrow.right")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(GradeDisplay.reject.color, in: .capsule)
+                .foregroundStyle(.white)
+            }
         }
-        .padding(20)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
     }
 }
 
-/// Modal Sheet daftar mangga yang ter-reject
-struct RejectedMangoSheet: View {
-    let records: [MangoRecord]
-    @Environment(\.dismiss) private var dismiss
+private struct ChartContainerCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        NavigationStack {
-            List(records) { record in
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(GradeDisplay.reject.color)
-                        .frame(width: 12, height: 12)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline.bold())
+            content()
+                .frame(height: 180)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
+    }
+}
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Scan ID: \(record.id.uuidString.prefix(8))")
-                            .font(.headline)
-                        Text(record.rejectionReason ?? "Defek bintik melebihi ambang")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+private struct GradeSummaryTableView: View {
+    let records: [MangoRecord]
+    let totalCount: Int
+    let countForGrade: (GradeDisplay) -> Int
+    let weightForGrade: (GradeDisplay) -> Double
+    let percentageForGrade: (GradeDisplay) -> Double
 
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("\(Int(record.weightGrams)) g")
-                            .font(.subheadline.bold())
-                        Text(record.timestamp.formatted(date: .omitted, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
+    var body: some View {
+        VStack(spacing: 0) {
+            // Table Header
+            HStack {
+                Text("Grade")
+                    .font(.subheadline.bold())
+                    .frame(width: 110, alignment: .leading)
+                Text("Jumlah")
+                    .font(.subheadline.bold())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Text("Berat")
+                    .font(.subheadline.bold())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Text("Rasio")
+                    .font(.subheadline.bold())
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .navigationTitle("Daftar Mangga Reject (\(records.count))")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Tutup") { dismiss() }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemBackground))
+
+            Divider()
+
+            // Rows for Grade A, B, C, Reject
+            ForEach(GradeDisplay.allCases) { grade in
+                HStack {
+                    Text("Grade \(grade.rawValue)")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(grade.color.opacity(0.2))
+                        .foregroundStyle(grade == .c ? Color.black : grade.color)
+                        .clipShape(Capsule())
+                        .frame(width: 110, alignment: .leading)
+
+                    Text("\(countForGrade(grade).formatted()) buah")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    Text(String(format: "%.1f kg", weightForGrade(grade)))
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    Text(String(format: "%.1f%%", percentageForGrade(grade)))
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+                if grade != GradeDisplay.allCases.last {
+                    Divider()
                 }
             }
         }
+        .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
 
