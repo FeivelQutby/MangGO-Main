@@ -1,5 +1,17 @@
 import Foundation
 import Observation
+import Combine
+import CoreVideo
+
+enum MeasurementPhase {
+    case idle
+    case capturingPhoto1
+    case waitingForFlip
+    case waitingForMeasurement
+    case capturingPhoto2
+    case processing
+    case finished
+}
 
 @Observable
 @MainActor
@@ -13,6 +25,7 @@ final class CaptureViewModel {
     }
 
     private(set) var phase: Phase = .starting
+    private(set) var measurementPhase: MeasurementPhase = .idle
     private(set) var sample = MangoSample()
     private(set) var result: GradeResult?
     private(set) var errorMessage: String?
@@ -22,6 +35,15 @@ final class CaptureViewModel {
     private let detector: any DefectDetecting
     private let segmenter: any FruitSegmenting
     private let engine: GradingEngine
+    
+    private var ble: BLEManager?
+    private var cancellables = Set<AnyCancellable>()
+    
+    
+    @ObservationIgnored
+    private var photo1: CVPixelBuffer?
+    @ObservationIgnored
+    private var photo2: CVPixelBuffer?
 
     /// Tidak ikut dilacak Observation: ini kanal keluar, bukan state UI.
     /// Referensi kuat aman karena `StationSync` tidak pernah menunjuk balik
@@ -46,6 +68,7 @@ final class CaptureViewModel {
     var detections: [DefectObservation] {
         sample.defects
     }
+    
 
     // MARK: - Link ke iPad
 
@@ -163,5 +186,84 @@ final class CaptureViewModel {
         errorMessage = nil
         phase = .ready
         publish(.idle)
+    }
+    
+    func attachBLE(_ ble: BLEManager) {
+        self.ble = ble
+
+        ble.$lastEvent
+            .compactMap { $0 }
+            .sink { [weak self] event in
+                Task { @MainActor [weak self] in
+                    self?.handleBLEEvent(event)
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func handleBLEEvent(_ event: BLEEvent) {
+        switch event {
+
+        case .measurementStarted:
+            measurementPhase = .idle
+            print("📦 EVENT: MEASUREMENT_STARTED")
+
+        case .capture1:
+            measurementPhase = .capturingPhoto1
+            print("📸 EVENT: CAPTURE_1")
+
+            Task {
+                await capturePhoto1()
+            }
+
+        case .capture2:
+            measurementPhase = .capturingPhoto2
+            print("📸 EVENT: CAPTURE_2")
+
+            Task {
+                await capturePhoto2()
+            }
+
+        case .measurement(let measurement):
+            measurementPhase = .waitingForMeasurement
+
+            print("⚖️ MEASUREMENT RECEIVED")
+            print("Weight: \(measurement.weight) g")
+            print("Height: \(measurement.height) mm")
+
+            sample.mass = measurement.weight
+
+        case .measurementComplete:
+            measurementPhase = .finished
+            print("✅ EVENT: MEASUREMENT_COMPLETE")
+        }
+    }
+    
+    private func capturePhoto1() async {
+
+        guard let frame = camera.latestFrame else {
+            print("CAPTURE_1 failed: no camera frame")
+            return
+        }
+
+        photo1 = frame
+
+        print("Photo 1 captured")
+
+        ble?.sendCommand("PHOTO_1_DONE")
+    }
+    
+    private func capturePhoto2() async {
+
+        guard let frame = camera.latestFrame else {
+            print("CAPTURE_2 failed: no camera frame")
+            return
+        }
+
+        photo2 = frame
+
+        print("Photo 2 captured")
+
+        ble?.sendCommand("PHOTO_2_DONE")
     }
 }

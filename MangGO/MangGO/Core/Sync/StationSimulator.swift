@@ -19,7 +19,7 @@ struct SimulatorPanel: View {
     var body: some View {
         VStack(spacing: 20) {
             Label(sync.isLinked ? "iPad tersambung" : "Mencari iPad",
-                  systemImage: sync.isLinked ? "ipad" : "ipad.slash")
+                  systemImage: sync.isLinked ? "ipad" : "ipad.gen2.slash")
                 .font(.headline)
                 .foregroundStyle(sync.isLinked ? .green : .orange)
 
