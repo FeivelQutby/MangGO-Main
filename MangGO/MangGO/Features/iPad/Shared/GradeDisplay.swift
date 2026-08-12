@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// Representasi visual grade di layar iPad — warna dan judul besar.
-enum GradeDisplay: String, CaseIterable, Identifiable {
+enum GradeDisplay: String, CaseIterable, Identifiable, Codable {
     case a = "A"
     case b = "B"
     case c = "C"
@@ -18,10 +18,10 @@ enum GradeDisplay: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .a: Color(red: 0.35, green: 0.78, blue: 0.42)
-        case .b: Color(red: 0.91, green: 0.58, blue: 0.24)
-        case .c: Color(red: 0.96, green: 0.81, blue: 0.24)
-        case .reject: Color(red: 0.91, green: 0.36, blue: 0.36)
+        case .a: Color(red: 52/255, green: 199/255, blue: 89/255)
+        case .b: Color(red: 255/255, green: 141/255, blue: 40/255)
+        case .c: Color(red: 255/255, green: 204/255, blue: 0/255)
+        case .reject: Color(red: 255/255, green: 98/255, blue: 101/255)
         }
     }
 

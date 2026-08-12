@@ -18,11 +18,11 @@ struct IdleScreen: View {
                 Grid(horizontalSpacing: 16, verticalSpacing: 12) {
                     GridRow {
                         SensorChip("scalemass", "Load Cell", sensors.loadCell)
-                        SensorChip("ruler", "ToF", sensors.tof)
+                        SensorChip("sensor.tag.radiowaves.forward", "ToF", sensors.tof)
                     }
                     GridRow {
                         SensorChip("camera", "Camera", sensors.camera)
-                        SensorChip("dot.radiowaves.left.and.right", "Bluetooth", sensors.bluetooth)
+                        SensorChip("sensor.radiowaves.left.and.right", "Bluetooth", sensors.bluetooth)
                     }
                 }
                 .padding(20)
@@ -31,9 +31,9 @@ struct IdleScreen: View {
 
             section("Mulai Grading Mangga") {
                 HStack(spacing: 16) {
-                    StepCard("hand.point.down.fill", "Letakkan mangga di atas alat")
-                    StepCard("arrow.down.circle.fill", "Tekan tombol untuk mulai grading")
-                    StepCard("checkmark.seal.fill", "Tunggu dan lihat hasil grading")
+                    StepCard("1", "hand.point.down.fill", "Letakkan mangga di atas alat")
+                    StepCard("2", "arrow.down.circle.fill", "Tekan tombol untuk mulai grading setiap mangga")
+                    StepCard("3", "checkmark.seal.fill", "Tunggu dan lihat hasil grading")
                 }
             }
         }
@@ -49,8 +49,6 @@ struct IdleScreen: View {
     }
 }
 
-/// Baris sensor versi lebar — dipakai hanya di IdleScreen, di mana ada ruang
-/// untuk menuliskan status secara eksplisit.
 private struct SensorChip: View {
 
     let icon: String
@@ -71,41 +69,48 @@ private struct SensorChip: View {
             Text(state.label)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(state.color)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(state.color.opacity(0.15), in: .capsule)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(state.backgroundColor, in: .capsule)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(width: 300)
+        .frame(width: 320)
         .background(Color(.systemBackground), in: .rect(cornerRadius: 14))
     }
 }
 
 private struct StepCard: View {
 
+    let stepNumber: String
     let icon: String
     let text: String
 
-    init(_ icon: String, _ text: String) {
+    init(_ stepNumber: String, _ icon: String, _ text: String) {
+        self.stepNumber = stepNumber
         self.icon = icon
         self.text = text
     }
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
-                .frame(height: 80)
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 54, height: 54)
+                Text(stepNumber)
+                    .font(.title2.bold())
+                    .foregroundStyle(Color.accentColor)
+            }
             Text(text)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
         }
         .padding(20)
-        .frame(width: 200, height: 200)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 20))
+        .frame(width: 220, height: 180)
+        .background(Color(.systemBackground), in: .rect(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
 }
 

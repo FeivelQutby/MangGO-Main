@@ -1,6 +1,6 @@
 import Foundation
 
-/// Memilih detektor saat runtime.
+/// Memilih detektor dan isolator saat runtime.
 ///
 /// Selama `MangoDefect.mlmodelc` belum ada di bundle, `CoreMLDefectDetector`
 /// selalu melempar `.modelUnavailable`, artinya siklus grading tidak pernah
@@ -20,5 +20,17 @@ enum DefectDetectorFactory {
             return CoreMLDefectDetector()
         }
         return MockDefectDetector()
+    }
+
+    /// Isolasi buah tidak bergantung pada model bundle — Vision selalu ada.
+    /// Yang tidak ada adalah Neural Engine di Simulator: di sana
+    /// `VNGenerateForegroundInstanceMaskRequest` gagal membuat inference
+    /// context, jadi jalur mock dipakai supaya demo tanpa device tetap jalan.
+    nonisolated static func makeIsolator() -> any FruitIsolating {
+        #if targetEnvironment(simulator)
+        return MockFruitIsolator()
+        #else
+        return VisionFruitIsolator()
+        #endif
     }
 }

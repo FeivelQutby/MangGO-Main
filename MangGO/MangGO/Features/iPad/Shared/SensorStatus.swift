@@ -14,9 +14,17 @@ extension StationSnapshot.Sensors.State {
 
     var color: Color {
         switch self {
-        case .ready: .green
-        case .waiting: .orange
-        case .offline: .red
+        case .ready: Color(red: 0/255, green: 92/255, blue: 23/255)
+        case .waiting: Color(red: 88/255, green: 66/255, blue: 0/255)
+        case .offline: Color(red: 180/255, green: 0/255, blue: 0/255)
+        }
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .ready: Color(red: 221/255, green: 255/255, blue: 229/255)
+        case .waiting: Color(red: 255/255, green: 248/255, blue: 179/255)
+        case .offline: Color(red: 255/255, green: 225/255, blue: 225/255)
         }
     }
 

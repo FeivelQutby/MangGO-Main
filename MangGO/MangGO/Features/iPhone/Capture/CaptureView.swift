@@ -14,11 +14,7 @@ struct CaptureView: View {
             if model.phase == .accessDenied {
                 accessDenied
             } else {
-                CameraPreviewView(session: model.camera.session)
-                    .ignoresSafeArea()
-
-                DetectionOverlay(detections: model.detections)
-                    .ignoresSafeArea()
+                viewfinder
 
                 VStack(spacing: 12) {
                     statusBadge
@@ -37,16 +33,40 @@ struct CaptureView: View {
         .onDisappear { model.stopCamera() }
     }
 
+    /// Preview dan overlay berbagi satu kontainer dengan rasio frame kamera.
+    /// Selama keduanya di kotak yang sama, bounding box ternormalisasi jatuh
+    /// tepat di atas piksel yang menghasilkannya — tidak ada lagi koreksi
+    /// crop `resizeAspectFill` yang harus ditebak.
+    private var viewfinder: some View {
+        ZStack {
+            CameraPreviewView(session: model.camera.session)
+            DetectionOverlay(detections: model.detections)
+        }
+        .aspectRatio(model.camera.capabilities.uprightAspectRatio, contentMode: .fit)
+    }
+
     private var statusBadge: some View {
         VStack(spacing: 4) {
             Text(statusText)
                 .font(.subheadline.weight(.medium))
+
+            if let detail = detailText {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
+            }
+
+            if !zoomWarning.isEmpty {
+                Text(zoomWarning)
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
             }
         }
         .foregroundStyle(.white)
@@ -96,6 +116,21 @@ struct CaptureView: View {
         case .finished:
             return model.detections.isEmpty ? "Tidak ada bintik terdeteksi" : "Selesai"
         }
+    }
+
+    /// Jumlah deteksi yang dibuang filter mask. Ditampilkan supaya kalau ada
+    /// kabel atau dudukan yang tertangkap detektor, itu terlihat sebagai angka
+    /// dan bukan diam-diam masuk ke persentase bintik.
+    private var detailText: String? {
+        guard model.phase == .finished, model.rejectedDetections > 0 else { return nil }
+        return "\(model.rejectedDetections) deteksi di luar buah dibuang"
+    }
+
+    private var zoomWarning: String {
+        let capabilities = model.camera.capabilities
+        guard capabilities.requestedDisplayZoom < 1, !capabilities.isUltraWideActive,
+              model.phase != .starting else { return "" }
+        return "0.5x tidak tersedia — perangkat ini tanpa lensa ultra-wide"
     }
 }
 

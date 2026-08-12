@@ -17,10 +17,14 @@ final class CaptureViewModel {
     private(set) var result: GradeResult?
     private(set) var errorMessage: String?
 
+    /// Deteksi yang dibuang karena jatuh di latar, bukan di kulit buah. Angka
+    /// ini yang membuktikan filter mask sedang bekerja — kalau selalu 0 padahal
+    /// isi kotak ramai, kemungkinan besar isolasi buah tidak jalan.
+    private(set) var rejectedDetections = 0
+
     let camera: CameraSession
 
-    private let detector: any DefectDetecting
-    private let segmenter: any FruitSegmenting
+    private let pipeline: DefectPipeline
     private let engine: GradingEngine
 
     /// Tidak ikut dilacak Observation: ini kanal keluar, bukan state UI.
@@ -33,12 +37,11 @@ final class CaptureViewModel {
     /// initializer, yang selalu dievaluasi di luar isolasi MainActor.
     nonisolated init(
         detector: any DefectDetecting = MockDefectDetector(),
-        segmenter: any FruitSegmenting = MockFruitSegmenter(),
+        isolator: any FruitIsolating = DefectDetectorFactory.makeIsolator(),
         engine: GradingEngine = GradingEngine(),
         camera: CameraSession = CameraSession()
     ) {
-        self.detector = detector
-        self.segmenter = segmenter
+        self.pipeline = DefectPipeline(isolator: isolator, detector: detector)
         self.engine = engine
         self.camera = camera
     }
@@ -123,6 +126,12 @@ final class CaptureViewModel {
         camera.stop()
     }
 
+    /// Membekukan exposure dan white balance. Dipanggil operator sebelum batch
+    /// supaya pembacaan warna antar buah bisa dibandingkan.
+    func lockColorSettings() {
+        camera.lockColorSettings()
+    }
+
     func analyze() async {
         guard phase == .ready || phase == .finished else { return }
 
@@ -133,11 +142,12 @@ final class CaptureViewModel {
         let input = camera.latestFrame.map(VisionInput.pixelBuffer) ?? .unavailable
 
         do {
-            async let detected = detector.detect(in: input)
-            async let area = segmenter.fruitAreaRatio(in: input)
+            let analysis = try await pipeline.analyze(input)
 
-            sample.defects = try await detected
-            sample.fruitAreaRatio = try await area
+            sample.defects = analysis.defects
+            sample.fruitAreaRatio = analysis.fruitAreaRatio
+            sample.color = analysis.color
+            rejectedDetections = analysis.rejectedDetections
 
             let evaluated = engine.evaluate(sample)
             result = evaluated
@@ -161,6 +171,7 @@ final class CaptureViewModel {
         sample = MangoSample()
         result = nil
         errorMessage = nil
+        rejectedDetections = 0
         phase = .ready
         publish(.idle)
     }
