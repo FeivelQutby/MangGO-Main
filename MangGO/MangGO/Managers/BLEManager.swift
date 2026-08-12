@@ -11,8 +11,6 @@ import Combine
 
 struct BLEMeasurement: Codable {
     let weight: Double
-    let distance: Double
-    var height: Double = 70.0
 }
 
 enum BLEEvent {
@@ -150,17 +148,7 @@ final class BLEManager: NSObject, ObservableObject {
 
                 lastEvent = .measurement(measurement)
 
-                print(
-                    "Weight: \(measurement.weight) g"
-                )
-
-                print(
-                    "Distance: \(measurement.distance) mm"
-                )
-
-                print(
-                    "Height: \(measurement.height) mm"
-                )
+                print("Weight: \(measurement.weight) g")
 
             } catch {
 

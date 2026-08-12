@@ -1,5 +1,3 @@
-#include <Wire.h>
-#include <VL53L0X.h>
 #include <HX711.h>
 #include <NimBLEDevice.h>
 
@@ -10,34 +8,30 @@
 #define HX711_DT 5
 #define HX711_SCK 4
 
-#define TOF_SDA 6
-#define TOF_SCL 7
+#define SERVO_PIN 3
 
-#define SERVO_PIN 2
-#define BUTTON_PIN 1
+#define BUTTON_PIN 6
 
 // =========================
-// SENSOR CONFIGURATION
+// HX711 CALIBRATION
 // =========================
 
 #define SCALE_FACTOR 1047.4
-#define SENSOR_TO_BOWL_MM 325.0
 
 HX711 scale;
-VL53L0X tof;
 
 // =========================
 // BLE
 // =========================
 
 #define SERVICE_UUID \
-    "12345678-1234-1234-1234-123456789000"
+"12345678-1234-1234-1234-123456789000"
 
 #define COMMAND_UUID \
-    "12345678-1234-1234-1234-123456789001"
+"12345678-1234-1234-1234-123456789001"
 
 #define EVENT_UUID \
-    "12345678-1234-1234-1234-123456789002"
+"12345678-1234-1234-1234-123456789002"
 
 NimBLECharacteristic* commandCharacteristic;
 NimBLECharacteristic* eventCharacteristic;
@@ -71,9 +65,13 @@ void setServoMicroseconds(int us) {
     ledcWrite(SERVO_PIN, duty);
 }
 
-void moveServo(int fromUs, int toUs, int durationMs) {
+void moveServo(
+    int fromUs,
+    int toUs,
+    int durationMs
+) {
 
-    int steps = 100;
+    const int steps = 100;
 
     float step =
         (float)(toUs - fromUs) / steps;
@@ -93,12 +91,24 @@ void moveServo(int fromUs, int toUs, int durationMs) {
 }
 
 // =========================
-// BLE
+// BLE SEND
 // =========================
 
 void sendEvent(String message) {
 
-    Serial.print("BLE -> iPhone: ");
+    if (!deviceConnected) {
+
+        Serial.println(
+            "BLE not connected"
+        );
+
+        return;
+    }
+
+    Serial.print(
+        "ESP32 -> iPhone: "
+    );
+
     Serial.println(message);
 
     eventCharacteristic->setValue(
@@ -109,7 +119,7 @@ void sendEvent(String message) {
 }
 
 // =========================
-// MEASUREMENT
+// HX711
 // =========================
 
 float readWeight() {
@@ -128,74 +138,41 @@ float readWeight() {
     return total / samples;
 }
 
-float readDistance() {
-
-    const int samples = 10;
-
-    float total = 0;
-
-    for (int i = 0; i < samples; i++) {
-
-        total +=
-            tof.readRangeSingleMillimeters();
-
-        delay(50);
-    }
-
-    return total / samples;
-}
+// =========================
+// MEASUREMENT
+// =========================
 
 void performMeasurement() {
 
     Serial.println();
-    Serial.println("===== MEASUREMENT =====");
+    Serial.println(
+        "===== MEASUREMENT ====="
+    );
 
     float weight = readWeight();
-
-    float distance = readDistance();
-
-    float mangoHeight =
-        SENSOR_TO_BOWL_MM - distance;
 
     Serial.print("Weight: ");
     Serial.print(weight, 1);
     Serial.println(" g");
 
-    Serial.print("ToF Distance: ");
-    Serial.print(distance, 1);
-    Serial.println(" mm");
-
-    Serial.print("Mango Height: ");
-    Serial.print(mangoHeight, 1);
-    Serial.println(" mm");
-
     String data =
         "{\"weight\":" +
         String(weight, 1) +
-        ",\"distance\":" +
-        String(distance, 1) +
-        ",\"height\":" +
-        String(mangoHeight, 1) +
         "}";
 
-    eventCharacteristic->setValue(
-        data.c_str()
+    sendEvent(data);
+
+    Serial.println(
+        "======================="
     );
-
-    eventCharacteristic->notify();
-
-    Serial.print("BLE -> iPhone: ");
-    Serial.println(data);
-
-    Serial.println("=======================");
 }
 
 // =========================
-// BLE CALLBACKS
+// BLE COMMAND CALLBACK
 // =========================
 
-class CommandCallbacks :
-    public NimBLECharacteristicCallbacks {
+class CommandCallbacks
+    : public NimBLECharacteristicCallbacks {
 
     void onWrite(
         NimBLECharacteristic* characteristic,
@@ -208,27 +185,56 @@ class CommandCallbacks :
         String command =
             String(value.c_str());
 
-        Serial.print("iPhone -> ESP32: ");
+        Serial.print(
+            "iPhone -> ESP32: "
+        );
+
         Serial.println(command);
 
-        if (
-            command == "PHOTO_1_DONE" &&
-            state == WAITING_FOR_PHOTO_1
-        ) {
-            state = MOVING_MANGO;
+        // Photo 1 completed
+        if (command == "PHOTO_1_DONE") {
+
+            if (
+                state ==
+                WAITING_FOR_PHOTO_1
+            ) {
+
+                Serial.println(
+                    "Photo 1 confirmed"
+                );
+
+                state =
+                    MOVING_MANGO;
+            }
         }
 
+        // Photo 2 completed
         else if (
-            command == "PHOTO_2_DONE" &&
-            state == WAITING_FOR_PHOTO_2
+            command == "PHOTO_2_DONE"
         ) {
-            state = COMPLETE;
+
+            if (
+                state ==
+                WAITING_FOR_PHOTO_2
+            ) {
+
+                Serial.println(
+                    "Photo 2 confirmed"
+                );
+
+                state =
+                    COMPLETE;
+            }
         }
     }
 };
 
-class ServerCallbacks :
-    public NimBLEServerCallbacks {
+// =========================
+// BLE SERVER CALLBACK
+// =========================
+
+class ServerCallbacks
+    : public NimBLEServerCallbacks {
 
     void onConnect(
         NimBLEServer* server,
@@ -237,7 +243,10 @@ class ServerCallbacks :
 
         deviceConnected = true;
 
-        Serial.println("iPhone connected!");
+        Serial.println();
+        Serial.println(
+            "iPhone connected!"
+        );
     }
 
     void onDisconnect(
@@ -248,9 +257,12 @@ class ServerCallbacks :
 
         deviceConnected = false;
 
-        Serial.println("iPhone disconnected!");
+        Serial.println(
+            "iPhone disconnected!"
+        );
 
-        NimBLEDevice::getAdvertising()->start();
+        NimBLEDevice::
+            getAdvertising()->start();
     }
 };
 
@@ -265,12 +277,30 @@ void setup() {
     delay(1000);
 
     Serial.println();
-    Serial.println("===== MangGO ESP32 =====");
+    Serial.println(
+        "======================"
+    );
+
+    Serial.println(
+        "MangGO ESP32"
+    );
+
+    Serial.println(
+        "======================"
+    );
+
+    // =========================
+    // BUTTON
+    // =========================
 
     pinMode(
         BUTTON_PIN,
         INPUT_PULLDOWN
     );
+
+    // =========================
+    // SERVO
+    // =========================
 
     ledcAttach(
         SERVO_PIN,
@@ -278,7 +308,16 @@ void setup() {
         16
     );
 
+    // Initial position
     setServoMicroseconds(500);
+
+    Serial.println(
+        "Servo ready"
+    );
+
+    // =========================
+    // HX711
+    // =========================
 
     scale.begin(
         HX711_DT,
@@ -289,22 +328,19 @@ void setup() {
         SCALE_FACTOR
     );
 
-    Serial.println("Taring HX711...");
+    Serial.println(
+        "Taring HX711..."
+    );
 
     scale.tare();
 
-    Serial.println("HX711 ready");
-
-    Wire.begin(
-        TOF_SDA,
-        TOF_SCL
+    Serial.println(
+        "HX711 ready"
     );
 
-    tof.init();
-
-    tof.setTimeout(500);
-
-    Serial.println("VL53L0X ready");
+    // =========================
+    // BLE
+    // =========================
 
     NimBLEDevice::init(
         "MangGO-ESP32"
@@ -322,6 +358,7 @@ void setup() {
             SERVICE_UUID
         );
 
+    // iPhone -> ESP32
     commandCharacteristic =
         service->createCharacteristic(
             COMMAND_UUID,
@@ -332,6 +369,7 @@ void setup() {
         new CommandCallbacks()
     );
 
+    // ESP32 -> iPhone
     eventCharacteristic =
         service->createCharacteristic(
             EVENT_UUID,
@@ -349,8 +387,17 @@ void setup() {
 
     advertising->start();
 
-    Serial.println("BLE ready");
-    Serial.println("Waiting for iPhone...");
+    Serial.println(
+        "BLE ready"
+    );
+
+    Serial.println(
+        "Device name: MangGO-ESP32"
+    );
+
+    Serial.println(
+        "Waiting for iPhone..."
+    );
 }
 
 // =========================
@@ -359,15 +406,21 @@ void setup() {
 
 void loop() {
 
+    // =========================
+    // IDLE
+    // =========================
+
     if (state == IDLE) {
 
         if (
-            digitalRead(BUTTON_PIN) == HIGH &&
-            deviceConnected
+            digitalRead(BUTTON_PIN) == HIGH
+            && deviceConnected
         ) {
 
             Serial.println();
-            Serial.println("BUTTON PRESSED");
+            Serial.println(
+                "BUTTON PRESSED"
+            );
 
             sendEvent(
                 "MEASUREMENT_STARTED"
@@ -386,10 +439,21 @@ void loop() {
         }
     }
 
-    else if (state == MOVING_MANGO) {
+    // =========================
+    // MOVE MANGO
+    // =========================
+
+    else if (
+        state == MOVING_MANGO
+    ) {
 
         Serial.println();
-        Serial.println("Moving mango...");
+        Serial.println(
+            "Moving mango..."
+        );
+
+        // 500us -> 1500us
+        // over 2 seconds
 
         moveServo(
             500,
@@ -398,11 +462,13 @@ void loop() {
         );
 
         Serial.println(
-            "Waiting 5 seconds..."
+            "Waiting 3 seconds..."
         );
 
-        delay(5000);
+        delay(3000);
 
+        // Return to start
+        
         moveServo(
             1500,
             500,
@@ -410,15 +476,25 @@ void loop() {
         );
 
         Serial.println(
-            "Mango settled."
+            "Mango settled"
         );
+
+        // Allow the mango
+        // and load cell to settle
 
         delay(1000);
 
-        state = MEASURING;
+        state =
+            MEASURING;
     }
 
-    else if (state == MEASURING) {
+    // =========================
+    // MEASUREMENT
+    // =========================
+
+    else if (
+        state == MEASURING
+    ) {
 
         performMeasurement();
 
@@ -432,7 +508,13 @@ void loop() {
             WAITING_FOR_PHOTO_2;
     }
 
-    else if (state == COMPLETE) {
+    // =========================
+    // COMPLETE
+    // =========================
+
+    else if (
+        state == COMPLETE
+    ) {
 
         sendEvent(
             "MEASUREMENT_COMPLETE"
@@ -443,7 +525,8 @@ void loop() {
             "===== COMPLETE ====="
         );
 
-        state = IDLE;
+        state =
+            IDLE;
 
         delay(1000);
     }

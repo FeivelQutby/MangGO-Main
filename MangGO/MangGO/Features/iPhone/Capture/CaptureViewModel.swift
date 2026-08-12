@@ -48,6 +48,10 @@ final class CaptureViewModel {
     private var photo1: CVPixelBuffer?
     @ObservationIgnored
     private var photo2: CVPixelBuffer?
+    
+    private var photo1Captured = false
+    private var photo2Captured = false
+    private var measurementReceived = false
 
     /// Tidak ikut dilacak Observation: ini kanal keluar, bukan state UI.
     /// Referensi kuat aman karena `StationSync` tidak pernah menunjuk balik
@@ -156,36 +160,126 @@ final class CaptureViewModel {
     }
 
     func analyze() async {
-        guard phase == .ready || phase == .finished else { return }
+
+        guard phase == .ready || phase == .finished else {
+            return
+        }
+
+        guard let photo2 else {
+            print("❌ Photo 2 is missing")
+            return
+        }
 
         phase = .analyzing
         errorMessage = nil
+
         publish(.scanningFront)
 
-        let input = camera.latestFrame.map(VisionInput.pixelBuffer) ?? .unavailable
+        let input = VisionInput.pixelBuffer(photo2)
 
         do {
+
             let analysis = try await pipeline.analyze(input)
+
+            // MARK: - Defect Analysis
+
+            print("🔍 DEFECT ANALYSIS")
+            print("Defects detected: \(analysis.defects.count)")
+            print(
+                "Fruit area ratio: " +
+                String(
+                    format: "%.2f%%",
+                    analysis.fruitAreaRatio * 100
+                )
+            )
+            print(
+                "Rejected detections: \(analysis.rejectedDetections)"
+            )
+
+            for (index, defect) in analysis.defects.enumerated() {
+
+                print("Defect #\(index + 1)")
+                print("Label: \(defect.label)")
+                print(
+                    "Confidence: " +
+                    String(
+                        format: "%.1f%%",
+                        defect.confidence * 100
+                    )
+                )
+                print(
+                    "Area ratio: " +
+                    String(
+                        format: "%.2f%%",
+                        defect.frameAreaRatio * 100
+                    )
+                )
+                print("Bounding box: \(defect.boundingBox)")
+                print("--------------------")
+            }
+
+            // MARK: - Update Sample
 
             sample.defects = analysis.defects
             sample.fruitAreaRatio = analysis.fruitAreaRatio
             sample.color = analysis.color
-            rejectedDetections = analysis.rejectedDetections
+
+            rejectedDetections =
+                analysis.rejectedDetections
+
+            // MARK: - Grading
 
             let evaluated = engine.evaluate(sample)
+
             result = evaluated
             phase = .finished
 
             if let evaluated {
-                counts[evaluated.grade.displayCode, default: 0] += 1
-                publish(.done, result: stationResult(from: evaluated))
+
+                print("🎯 GRADING RESULT")
+                print(
+                    "Grade: \(evaluated.grade.displayCode)"
+                )
+
+                print("Limiting factors:")
+
+                for factor in evaluated.limitingFactors {
+
+                    print(
+                        "- \(factor.indicator.displayName)"
+                    )
+
+                    print(
+                        "  \(factor.detail)"
+                    )
+                }
+
+                counts[
+                    evaluated.grade.displayCode,
+                    default: 0
+                ] += 1
+
+                publish(
+                    .done,
+                    result: stationResult(
+                        from: evaluated
+                    )
+                )
+
             } else {
-                // Tidak ada indikator yang terisi; jangan tampilkan grade palsu.
+
+                print("⚠️ No grade result")
+
                 publish(.idle)
             }
+
         } catch {
-            errorMessage = error.localizedDescription
+
+            errorMessage =
+                error.localizedDescription
+
             phase = .ready
+
             publish(.idle)
         }
     }
@@ -205,76 +299,117 @@ final class CaptureViewModel {
         ble.$lastEvent
             .compactMap { $0 }
             .sink { [weak self] event in
-                Task { @MainActor [weak self] in
-                    self?.handleBLEEvent(event)
-                }
+                self?.handleBLEEvent(event)
             }
             .store(in: &cancellables)
     }
     
     private func handleBLEEvent(_ event: BLEEvent) {
+
+        print("📦 BLE EVENT: \(event)")
+
         switch event {
 
         case .measurementStarted:
-            measurementPhase = .idle
-            print("📦 EVENT: MEASUREMENT_STARTED")
+
+            photo1Captured = false
+            photo2Captured = false
+            measurementReceived = false
+
+            photo1 = nil
+            photo2 = nil
+
+            measurementPhase = .capturingPhoto1
+            phase = .ready
+
+            print("🚀 Measurement started")
+
 
         case .capture1:
+
             measurementPhase = .capturingPhoto1
-            print("📸 EVENT: CAPTURE_1")
+
+            print("📸 Capture 1 requested")
 
             Task {
                 await capturePhoto1()
             }
 
+
         case .capture2:
+
             measurementPhase = .capturingPhoto2
-            print("📸 EVENT: CAPTURE_2")
+
+            print("📸 Capture 2 requested")
 
             Task {
                 await capturePhoto2()
             }
 
+
         case .measurement(let measurement):
-            measurementPhase = .waitingForMeasurement
 
             print("⚖️ MEASUREMENT RECEIVED")
             print("Weight: \(measurement.weight) g")
-            print("Height: \(measurement.height) mm")
 
             sample.mass = measurement.weight
+            measurementReceived = true
+
+            measurementPhase = .capturingPhoto2
 
         case .measurementComplete:
-            measurementPhase = .finished
-            print("✅ EVENT: MEASUREMENT_COMPLETE")
+
+            print("✅ Measurement complete")
+
+            print("""
+            Photo 1: \(photo1Captured)
+            Photo 2: \(photo2Captured)
+            Weight: \(measurementReceived)
+            """)
+
+            guard photo1Captured,
+                  photo2Captured,
+                  measurementReceived
+            else {
+                print("⚠️ Cannot analyze yet")
+                return
+            }
+
+            measurementPhase = .processing
+
+            Task {
+                await analyze()
+            }
         }
     }
     
     private func capturePhoto1() async {
 
+        print("📸 Taking photo 1...")
+
         guard let frame = camera.latestFrame else {
-            print("CAPTURE_1 failed: no camera frame")
+            print("❌ No camera frame")
             return
         }
 
         photo1 = frame
+        photo1Captured = true
+        measurementPhase = .waitingForFlip
+        print("📸 Photo 1 captured")
 
-        print("Photo 1 captured")
-
-        ble?.sendCommand("PHOTO_1_DONE")
-    }
+        ble?.sendCommand("PHOTO_1_DONE")    }
     
     private func capturePhoto2() async {
 
+        print("📸 Taking photo 2...")
+
         guard let frame = camera.latestFrame else {
-            print("CAPTURE_2 failed: no camera frame")
+            print("❌ No camera frame")
             return
         }
 
         photo2 = frame
-
-        print("Photo 2 captured")
-
-        ble?.sendCommand("PHOTO_2_DONE")
-    }
+        photo2Captured = true
+        print("📸 Photo 2 captured")
+        ble?.sendCommand("PHOTO_2_DONE")    }
 }
