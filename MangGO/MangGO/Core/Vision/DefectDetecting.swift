@@ -14,6 +14,8 @@ enum VisionInput: @unchecked Sendable {
 enum VisionError: LocalizedError {
     case modelUnavailable
     case noImage
+    case unsupportedImage
+    case fruitNotFound
     case inferenceFailed(Error)
 
     var errorDescription: String? {
@@ -22,6 +24,10 @@ enum VisionError: LocalizedError {
             return "Model Core ML belum tersedia."
         case .noImage:
             return "Tidak ada gambar untuk dianalisis."
+        case .unsupportedImage:
+            return "Format gambar tidak bisa diproses."
+        case .fruitNotFound:
+            return "Buah tidak terdeteksi di frame. Pastikan hanya satu mangga yang terlihat dan posisinya di tengah."
         case .inferenceFailed(let error):
             return "Inferensi gagal: \(error.localizedDescription)"
         }
