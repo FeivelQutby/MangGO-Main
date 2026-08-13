@@ -14,13 +14,14 @@ struct iPadView: View {
 
     enum Tab: String, CaseIterable {
         case grading = "Grading"
-        case recent = "Hasil Terbaru"
-        case history = "Riwayat"
+        case dataHarian = "Data Harian"
+        case tren = "Tren"
     }
 
     @Environment(StationSync.self) private var sync
     @State private var tab: Tab = .grading
-    @State private var dummyRecords: [MangoRecord] = DummyDataStore.generateDummyRecords(days: 30)
+
+    @State private var dummyRecords: [MangoRecord] = DummyDataStore.generateDummyRecords()
 
     private var snapshot: StationSnapshot { sync.snapshot }
 
@@ -28,15 +29,32 @@ struct iPadView: View {
         sync.isLinked ? snapshot.completedGrade : nil
     }
 
+    private var todayRecords: [MangoRecord] {
+        let calendar = Calendar.current
+        let today = Date()
+        return dummyRecords.filter { calendar.isDate($0.timestamp, inSameDayAs: today) }
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                Picker("", selection: $tab) {
-                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                // Top Navigation Bar matching Figma
+                ZStack {
+                    // Center: Main Tab Picker
+                    Picker("", selection: $tab) {
+                        ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 420)
+
+                    // Trailing: Sub-preset picker & Debug Toggle
+                        Spacer()
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 480)
+                .padding(.horizontal, 24)
                 .padding(.vertical, 16)
+                .background(Color(.systemBackground))
+
+                Divider()
 
                 content.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -58,10 +76,28 @@ struct iPadView: View {
             GradingScreen(snapshot: snapshot,
                           isLinked: sync.isLinked,
                           connectionError: sync.lastError)
-        case .recent:
-            RecentScreen(records: dummyRecords)
-        case .history:
-            HistoryScreen(allRecords: dummyRecords)
+
+        case .dataHarian:
+            if dummyRecords.isEmpty {
+                EmptyStateView(
+                    title: "Belum Ada Data Harian Grading",
+                    subtitle: "Mulai batch baru untuk melihat data harian grading",
+                    icon: "shippingbox"
+                )
+            } else {
+                RecentScreen(records: dummyRecords)
+            }
+
+        case .tren:
+            if dummyRecords.isEmpty {
+                EmptyStateView(
+                    title: "Belum Ada Data Tren Grading",
+                    subtitle: "Mulai batch baru untuk melihat data tren grading",
+                    icon: "shippingbox"
+                )
+            } else {
+                HistoryScreen(allRecords: dummyRecords)
+            }
         }
     }
 }

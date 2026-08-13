@@ -19,8 +19,8 @@ enum GradeDisplay: String, CaseIterable, Identifiable, Codable {
     var color: Color {
         switch self {
         case .a: Color(red: 52/255, green: 199/255, blue: 89/255)
-        case .b: Color(red: 255/255, green: 141/255, blue: 40/255)
-        case .c: Color(red: 255/255, green: 204/255, blue: 0/255)
+        case .b: Color(red: 255/255, green: 204/255, blue: 0/255)
+        case .c: Color(red: 255/255, green: 141/255, blue: 40/255)
         case .reject: Color(red: 255/255, green: 98/255, blue: 101/255)
         }
     }
