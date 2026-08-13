@@ -56,6 +56,7 @@ struct StationSnapshot: Codable, Sendable, Equatable {
     struct Result: Codable, Sendable, Equatable {
         var grade: String
         var reason: String?
+        var score: Double?
         var weightGrams: Double?
         var volumeCm3: Double?
         var blushPercent: Double?
