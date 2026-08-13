@@ -17,6 +17,9 @@ struct LastResultSection: View {
         if let result {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 16) {
+                    if let score = result.score {
+                        MetricTile("Skor", value: score, unit: "/100", digits: 0)
+                    }
                     MetricTile("Berat", value: result.weightGrams, unit: "g", digits: 0)
                     MetricTile("Volume", value: result.volumeCm3, unit: "cm³", digits: 0)
                     MetricTile("Blush", value: result.blushPercent, unit: "%", digits: 1)

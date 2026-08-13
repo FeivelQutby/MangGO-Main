@@ -1,14 +1,12 @@
 import Foundation
 
-/// Rentang nilai yang memetakan satu pengukuran ke satu grade.
+/// Rentang nilai yang memetakan satu pengukuran ke satu grade (opsional / legacy band).
 struct GradeBand: Sendable {
     var grade: Grade
     var range: ClosedRange<Double>
 }
 
 extension Array where Element == GradeBand {
-    /// Band pertama yang cocok menang, jadi urutkan dari grade terbaik.
-    /// Nilai di luar semua band dianggap `.rejected`.
     func grade(for value: Double) -> Grade {
         first { $0.range.contains(value) }?.grade ?? .rejected
     }
@@ -16,22 +14,31 @@ extension Array where Element == GradeBand {
 
 protocol GradingCriterion: Sendable {
     var indicator: GradeIndicator { get }
+    var weight: Double { get }
     func evaluate(_ sample: MangoSample) -> GradeResult.Reason?
 }
 
-/// Kriteria yang menilai satu angka terhadap sekumpulan band.
-struct MetricCriterion: GradingCriterion {
+/// Kriteria penilaian ternormalisasi (skor 0...100).
+struct NormalizedCriterion: GradingCriterion {
     var indicator: GradeIndicator
-    var bands: [GradeBand]
-    var detailFormat: String
-    var measure: @Sendable (MangoSample) -> Double?
+    var weight: Double
+    var detailFormatter: @Sendable (MangoSample) -> String
+    var scoreCalculator: @Sendable (MangoSample) -> Double?
+    var standard: GradingStandard
 
     func evaluate(_ sample: MangoSample) -> GradeResult.Reason? {
-        guard let value = measure(sample) else { return nil }
+        guard let score = scoreCalculator(sample) else { return nil }
+        let clampedScore = min(max(score, 0.0), 100.0)
+        let grade = standard.grade(forScore: clampedScore)
+        let detail = detailFormatter(sample)
+
         return GradeResult.Reason(
             indicator: indicator,
-            grade: bands.grade(for: value),
-            detail: String(format: detailFormat, value)
+            grade: grade,
+            score: clampedScore,
+            weight: weight,
+            detail: detail
         )
     }
 }
+
