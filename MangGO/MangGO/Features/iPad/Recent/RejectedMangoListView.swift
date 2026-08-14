@@ -55,7 +55,7 @@ struct RejectedMangoListView: View {
         }
         return list
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             // ==========================================

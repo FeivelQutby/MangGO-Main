@@ -25,7 +25,7 @@ struct GradingScreen: View {
         } else if snapshot.phase.isWorking {
             ScanningScreen(phase: snapshot.phase)
         } else {
-            IdleScreen(sensors: snapshot.sensors)
+            IdleScreenView()
         }
     }
 }

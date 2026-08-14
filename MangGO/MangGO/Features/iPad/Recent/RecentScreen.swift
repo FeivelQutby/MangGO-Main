@@ -1,10 +1,3 @@
-//
-//  RecentScreen.swift
-//  MangGO
-//
-//  Created from Figma Node 434:535 & 2nd Iteration Specs
-//
-
 import SwiftUI
 import Charts
 
@@ -36,15 +29,46 @@ struct RecentScreen: View {
         todayRecords.filter { $0.grade == grade }.count
     }
 
-    private func weightKg(for grade: GradeDisplay) -> Double {
-        todayRecords.filter { $0.grade == grade }.reduce(0.0) { $0 + $1.weightGrams } / 1000.0
-    }
+enum RecentSortOption: String, CaseIterable, Identifiable {
+    case newestTimestamp = "Timestamp Terbaru"
+    case oldestTimestamp = "Timestamp Terlama"
+    case heaviest = "Paling Berat"
+    case lightest = "Paling Ringan"
+    case lowestDefect = "Tingkat Defect Terendah"
+    case highestDefect = "Tingkat Defect Tertinggi"
+    
+    var id: String { rawValue }
+}
 
-    private func percentage(for grade: GradeDisplay) -> Double {
-        guard totalCount > 0 else { return 0 }
-        return (Double(count(for: grade)) / Double(totalCount)) * 100.0
+struct RecentScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    // Sample state data harian (1 hari)
+    @State private var records: [MangoRecord] = DummyDataStore.generateDummyRecords(days: 1)
+        .filter { $0.grade == .reject }
+    
+    @State private var selectedSort: RecentSortOption = .newestTimestamp
+    @State private var selectedRecordForDetail: MangoRecord? = nil
+    @State private var navigateToDetail: Bool = false
+    
+    // Sorted records berdasarkan pilihan sort
+    var sortedRecords: [MangoRecord] {
+        switch selectedSort {
+        case .newestTimestamp:
+            return records.sorted { $0.timestamp > $1.timestamp }
+        case .oldestTimestamp:
+            return records.sorted { $0.timestamp < $1.timestamp }
+        case .heaviest:
+            return records.sorted { $0.weightGrams > $1.weightGrams }
+        case .lightest:
+            return records.sorted { $0.weightGrams < $1.weightGrams }
+        case .lowestDefect:
+            return records.sorted { $0.defectPercent < $1.defectPercent }
+        case .highestDefect:
+            return records.sorted { $0.defectPercent > $1.defectPercent }
+        }
     }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header Tanggal (Fixed Top Header - Stay Freeze!)
@@ -181,6 +205,9 @@ struct RecentScreen: View {
                                             AxisMarks(position: .leading)
                                         }
                                     }
+                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 16)
+                                    .background(index % 2 == 0 ? Color.white : Color(red: 245/255, green: 245/255, blue: 247/255))
                                 }
 
                                 // Bottom Section: Tabel Ringkasan 4 Kolom
@@ -194,6 +221,10 @@ struct RecentScreen: View {
                             }
                         }
                     }
+                    .cornerRadius(18)
+                    .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
+                    
+                    Spacer()
                 }
                 .padding(.horizontal, 40)
                 .padding(.bottom, 40)
