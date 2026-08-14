@@ -216,8 +216,9 @@ struct RejectedMangoListView: View {
         }
         .sheet(item: $selectedRecordForDetail) { record in
             RejectedMangoDetailView(
-                allRejected: rejectedRecords,
-                initialRecord: record
+                selectedRecord: record,
+                allRecords: rejectedRecords,
+                contextTitle: "Data Harian"
             )
         }
     }
