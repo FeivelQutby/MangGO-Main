@@ -190,3 +190,4 @@ private struct MetricDetailTile: View {
         initialRecord: dummies.first ?? MangoRecord(grade: .reject, weightGrams: 138, volumeCm3: 180, blushPercent: 0, defectPercent: 78, rejectionReason: "Defect tinggi")
     )
 }
+

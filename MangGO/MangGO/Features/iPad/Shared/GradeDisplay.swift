@@ -39,3 +39,4 @@ extension StationSnapshot {
         return GradeDisplay(rawValue: raw)
     }
 }
+

@@ -354,3 +354,4 @@ private struct GradeSummaryTableView: View {
 #Preview {
     RecentScreen(records: DummyDataStore.generateDummyRecords())
 }
+

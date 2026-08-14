@@ -105,3 +105,4 @@ struct iPadView: View {
 #Preview {
     iPadView().environment(StationSync(role: .display))
 }
+

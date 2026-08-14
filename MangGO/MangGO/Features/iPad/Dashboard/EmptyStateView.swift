@@ -51,3 +51,4 @@ struct EmptyStateView: View {
         icon: "chart.bar"
     )
 }
+

@@ -278,3 +278,4 @@ private struct RejectedMangoRowView: View {
         rejectedRecords: DummyDataStore.generateDummyRecords().filter { $0.grade == .reject }
     )
 }
+

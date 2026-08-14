@@ -98,3 +98,4 @@ struct ManagerDashboardView: View {
 #Preview("Data Harian Active") {
     ManagerDashboardView(records: DummyDataStore.generateDummyRecords())
 }
+
