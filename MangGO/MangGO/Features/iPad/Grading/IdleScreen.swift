@@ -18,7 +18,7 @@ struct IdleScreen: View {
                 Grid(horizontalSpacing: 16, verticalSpacing: 12) {
                     GridRow {
                         SensorChip("scalemass", "Load Cell", sensors.loadCell)
-                        SensorChip("sensor.tag.radiowaves.forward", "ToF", sensors.tof)
+                        SensorChip("gear", "Servo", sensors.servo)
                     }
                     GridRow {
                         SensorChip("camera", "Camera", sensors.camera)

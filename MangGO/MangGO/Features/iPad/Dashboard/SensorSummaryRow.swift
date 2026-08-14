@@ -17,7 +17,6 @@ struct SensorSummaryRow: View {
     var body: some View {
         HStack(spacing: 12) {
             chip("Load Cell", sensors.loadCell)
-            chip("ToF", sensors.tof)
             chip("Camera", sensors.camera)
             chip("Bluetooth", sensors.bluetooth)
         }

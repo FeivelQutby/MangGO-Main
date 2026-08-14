@@ -38,19 +38,32 @@ struct StationSnapshot: Codable, Sendable, Equatable {
     }
 
     struct Sensors: Codable, Sendable, Equatable {
-        enum State: String, Codable, Sendable { case ready, waiting, offline }
+        enum State: String, Codable, Sendable {
+            case ready
+            case waiting
+            case offline
+        }
 
         var loadCell: State = .offline
-        var tof: State = .offline
+        var servo: State = .offline
         var camera: State = .offline
         var bluetooth: State = .offline
 
         var allReady: Bool {
-            [loadCell, tof, camera, bluetooth].allSatisfy { $0 == .ready }
+            [
+                loadCell,
+                servo,
+                camera,
+                bluetooth
+            ].allSatisfy { $0 == .ready }
         }
 
-        static let allReady = Sensors(loadCell: .ready, tof: .ready,
-                                      camera: .ready, bluetooth: .ready)
+        static let allReady = Sensors(
+            loadCell: .ready,
+            servo: .ready,
+            camera: .ready,
+            bluetooth: .ready
+        )
     }
 
     struct Result: Codable, Sendable, Equatable {
