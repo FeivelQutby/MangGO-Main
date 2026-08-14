@@ -1,251 +1,281 @@
+//
+//  RejectedMangoListView.swift
+//  MangGO
+//
+//  Created from Figma Node 551:9554 & 551:9635 (Detail - Log Reject Harian & Sort Popover)
+//
+
 import SwiftUI
 
+/// Options untuk popover urutkan
+enum RejectSortOption: String, CaseIterable, Identifiable {
+    case timestampNewest = "Timestamp Terbaru"
+    case timestampOldest = "Timestamp Terlama"
+    case weightHeaviest = "Paling Berat"
+    case weightLightest = "Paling Ringan"
+    case defectHighest = "Tingkat Defect Tertinggi"
+    case defectLowest = "Tingkat Defect Terendah"
+
+    var id: String { rawValue }
+}
+
+/// Layar Full Screen "Log Mangga Reject" sesuai Figma Node 551:9554
 struct RejectedMangoListView: View {
+
+    let rejectedRecords: [MangoRecord]
+
     @Environment(\.dismiss) private var dismiss
-    
-    @State private var records: [MangoRecord] = DummyDataStore.generateDummyRecords(days: 7)
-        .filter { $0.grade == .reject }
-    
-    // State untuk Multi-select Date Filter Overlay
-    @State private var isDateFilterPresented: Bool = false
-    @State private var availableDates: [String] = ["8 Apr", "9 Apr", "10 Apr", "11 Apr", "12 Apr", "13 Apr", "14 Apr"]
-    @State private var selectedDates: Set<String> = ["9 Apr", "10 Apr", "12 Apr", "14 Apr"]
-    
-    // State untuk Sorting
-    @State private var selectedSort: RecentSortOption = .newestTimestamp
+    @State private var searchText = ""
+    @State private var sortOption: RejectSortOption = .timestampNewest
+    @State private var showingSortPopover = false
     @State private var selectedRecordForDetail: MangoRecord? = nil
-    @State private var navigateToDetail: Bool = false
-    
-    var filteredAndSortedRecords: [MangoRecord] {
-        let sorted = records
-        switch selectedSort {
-        case .newestTimestamp: return sorted.sorted { $0.timestamp > $1.timestamp }
-        case .oldestTimestamp: return sorted.sorted { $0.timestamp < $1.timestamp }
-        case .heaviest: return sorted.sorted { $0.weightGrams > $1.weightGrams }
-        case .lightest: return sorted.sorted { $0.weightGrams < $1.weightGrams }
-        case .lowestDefect: return sorted.sorted { $0.defectPercent < $1.defectPercent }
-        case .highestDefect: return sorted.sorted { $0.defectPercent > $1.defectPercent }
-        }
-    }
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(red: 247/255, green: 247/255, blue: 248/255)
-                    .ignoresSafeArea()
-                
-                VStack(alignment: .leading, spacing: 20) {
-                    // MARK: - Header Bar
-                    HStack(spacing: 16) {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.black)
-                                .frame(width: 44, height: 44)
-                                .background(Color.white)
-                                .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Tren 7 Hari")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.black)
-                            Text("8 Apr, 2026 - 14 Apr, 2026")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
-                    
-                    // MARK: - Filter & Sort Bar
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Log Mangga Reject")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.black)
-                        
-                        HStack(spacing: 12) {
-                            // Filter Tanggal Button with Popover Dropdown
-                            Button(action: { isDateFilterPresented.toggle() }) {
-                                HStack(spacing: 8) {
-                                    Text("Filter Tanggal")
-                                        .font(.system(size: 14, weight: .medium))
-                                    Image(systemName: "calendar")
-                                        .font(.system(size: 14))
-                                }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            }
-                            .popover(isPresented: $isDateFilterPresented) {
-                                DateFilterOverlayView(
-                                    availableDates: availableDates,
-                                    selectedDates: $selectedDates
-                                )
-                                .frame(width: 240, height: 320)
-                            }
-                            
-                            // Urutkan Button
-                            Menu {
-                                Picker("Urutkan", selection: $selectedSort) {
-                                    ForEach(RecentSortOption.allCases) { option in
-                                        Text(option.rawValue).tag(option)
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Text("Urutkan")
-                                        .font(.system(size: 14, weight: .medium))
-                                    Image(systemName: "line.3.horizontal.decrease")
-                                        .font(.system(size: 14))
-                                }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            }
-                        }
-                    }
-                    
-                    // MARK: - Table Card
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text("Kode Mangga").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Tanggal").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Timestamp").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Berat").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Tingkat Defect").frame(maxWidth: .infinity, alignment: .center)
-                            Spacer().frame(width: 80)
-                        }
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 16)
-                        .background(Color(red: 85/255, green: 85/255, blue: 85/255))
-                        
-                        ScrollView(.vertical, showsIndicators: false) {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(filteredAndSortedRecords.enumerated()), id: \.element.id) { index, record in
-                                    HStack {
-                                        Text(record.formattedCode)
-                                            .font(.system(size: 14, weight: .bold))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text(formatDate(record.timestamp))
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text(formatTime(record.timestamp))
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text("\(Int(record.weightGrams))")
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text("\(Int(record.defectPercent))%")
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Button(action: {
-                                            selectedRecordForDetail = record
-                                            navigateToDetail = true
-                                        }) {
-                                            Text("Detail")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundColor(.white)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 6)
-                                                .background(Color.blue)
-                                                .clipShape(Capsule())
-                                        }
-                                        .frame(width: 80, alignment: .center)
-                                    }
-                                    .padding(.vertical, 12)
-                                    .padding(.horizontal, 16)
-                                    .background(index % 2 == 0 ? Color.white : Color(red: 245/255, green: 245/255, blue: 247/255))
-                                }
-                            }
-                        }
-                    }
-                    .cornerRadius(18)
-                    .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 32)
-                .padding(.top, 20)
-            }
-            .navigationDestination(isPresented: $navigateToDetail) {
-                if let record = selectedRecordForDetail {
-                    RejectedMangoDetailView(selectedRecord: record, allRecords: records, contextTitle: "Tren 7 Hari")
-                }
-            }
-        }
-        .navigationViewStyle(.stack)
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter.string(from: date)
-    }
-    
-    private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: date)
-    }
-}
 
-// MARK: - Overlay Multiple Selection Date Filter Component
-struct DateFilterOverlayView: View {
-    let availableDates: [String]
-    @Binding var selectedDates: Set<String>
+    private var filteredAndSortedRecords: [MangoRecord] {
+        var list = rejectedRecords
+        if !searchText.isEmpty {
+            list = list.filter {
+                $0.formattedCode.localizedCaseInsensitiveContains(searchText) ||
+                $0.id.uuidString.localizedCaseInsensitiveContains(searchText) ||
+                ($0.rejectionReason?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+        switch sortOption {
+        case .timestampNewest:
+            list.sort(by: { $0.timestamp > $1.timestamp })
+        case .timestampOldest:
+            list.sort(by: { $0.timestamp < $1.timestamp })
+        case .weightHeaviest:
+            list.sort(by: { $0.weightGrams > $1.weightGrams })
+        case .weightLightest:
+            list.sort(by: { $0.weightGrams < $1.weightGrams })
+        case .defectHighest:
+            list.sort(by: { $0.defectPercent > $1.defectPercent })
+        case .defectLowest:
+            list.sort(by: { $0.defectPercent < $1.defectPercent })
+        }
+        return list
+    }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 0) {
+            // ==========================================
+            // TOP BAR NAVIGATION (Figma Spec)
+            // ==========================================
+            HStack(spacing: 16) {
+                // Back Button
+                Button(action: { dismiss() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+                        .padding(12)
+                        .background(Color.white, in: .circle)
+                }
+
+                // Title & Subtitle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Data Harian")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+                    if let firstDate = rejectedRecords.first?.timestamp {
+                        Text(firstDate.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                    } else {
+                        Text(Date().formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(Color(red: 242/255, green: 242/255, blue: 247/255))
+
+            Divider()
+
+            // ==========================================
+            // MAIN CONTENT BODY
+            // ==========================================
             ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(availableDates, id: \.self) { dateStr in
-                        let isSelected = selectedDates.contains(dateStr)
-                        Button(action: {
-                            if isSelected {
-                                selectedDates.remove(dateStr)
-                            } else {
-                                selectedDates.insert(dateStr)
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header Title + Urutkan Button under Title
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Log Mangga Reject")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+
+                        Button(action: { showingSortPopover = true }) {
+                            HStack(spacing: 8) {
+                                Text("Urutkan")
+                                    .font(.system(size: 16, weight: .medium))
+                                Image(systemName: "line.3.horizontal.decrease")
+                                    .font(.system(size: 14, weight: .semibold))
                             }
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(isSelected ? .blue : .gray)
-                                
-                                Text(dateStr)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.black)
-                                
-                                Spacer()
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.white, in: .capsule)
+                        }
+                        .popover(isPresented: $showingSortPopover) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(RejectSortOption.allCases) { option in
+                                    Button(action: {
+                                        sortOption = option
+                                        showingSortPopover = false
+                                    }) {
+                                        HStack {
+                                            Text(option.rawValue)
+                                                .font(.system(size: 16, weight: sortOption == option ? .semibold : .medium))
+                                                .foregroundStyle(sortOption == option ? Color(red: 0/255, green: 136/255, blue: 255/255) : Color.black)
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            sortOption == option ? Color(red: 224/255, green: 241/255, blue: 255/255) : Color.clear,
+                                            in: .rect(cornerRadius: 8)
+                                        )
+                                    }
+                                }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(isSelected ? Color.blue.opacity(0.12) : Color.clear)
-                            .cornerRadius(10)
+                            .padding(12)
+                            .frame(width: 260)
+                            .presentationCompactAdaptation(.popover)
                         }
                     }
+
+                    // Table Container (Log Mangga Reject Table)
+                    if filteredAndSortedRecords.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 56))
+                                .foregroundStyle(Color.green)
+                            Text("Tidak Ada Data Mangga Reject")
+                                .font(.system(size: 20, weight: .bold))
+                            Text("Semua mangga pada batch ini memenuhi standar kualitas.")
+                                .font(.system(size: 16))
+                                .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                        .background(Color.white, in: .rect(cornerRadius: 24))
+                    } else {
+                        VStack(spacing: 0) {
+                            // Table Header Row (#595959 Dark Gray)
+                            HStack {
+                                Text("Kode Mangga")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Text("Tanggal")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+
+                                Text("Timestamp")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+
+                                Text("Berat")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+
+                                Text("Tingkat Defect")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+
+                                // Empty header text for Detail column
+                                Text("")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 100, alignment: .center)
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 16)
+                            .background(Color(red: 89/255, green: 89/255, blue: 89/255))
+
+                            // Table Data Rows
+                            ForEach(Array(filteredAndSortedRecords.enumerated()), id: \.element.id) { index, record in
+                                RejectedMangoRowView(index: index, record: record) {
+                                    selectedRecordForDetail = record
+                                }
+                            }
+                        }
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                    }
                 }
-                .padding(10)
+                .padding(40)
             }
+            .background(Color(red: 242/255, green: 242/255, blue: 247/255))
         }
-        .background(Color.white)
+        .sheet(item: $selectedRecordForDetail) { record in
+            RejectedMangoDetailView(
+                allRejected: rejectedRecords,
+                initialRecord: record
+            )
+        }
     }
 }
 
-#Preview(traits: .landscapeLeft) {
-    RejectedMangoListView()
+// MARK: - Subcomponents
+
+private struct RejectedMangoRowView: View {
+    let index: Int
+    let record: MangoRecord
+    let onDetail: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(record.formattedCode)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(record.timestamp.formatted(date: .numeric, time: .omitted))
+                .font(.system(size: 18))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text(record.timestamp.formatted(date: .omitted, time: .standard))
+                .font(.system(size: 18))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text("\(Int(record.weightGrams)) g")
+                .font(.system(size: 18))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text(String(format: "%.0f%%", record.defectPercent))
+                .font(.system(size: 18))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Button(action: onDetail) {
+                Text("Detail")
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.blue, in: .capsule)
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 100, alignment: .center)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(index % 2 == 1 ? Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08) : Color.white)
+    }
 }
+
+#Preview {
+    RejectedMangoListView(
+        rejectedRecords: DummyDataStore.generateDummyRecords().filter { $0.grade == .reject }
+    )
+}
+

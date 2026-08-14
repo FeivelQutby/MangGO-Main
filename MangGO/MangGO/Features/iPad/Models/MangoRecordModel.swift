@@ -55,24 +55,30 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
 @MainActor
 enum DummyDataStore {
 
-    static func generateDummyRecords(days: Int = 30) -> [MangoRecord] {
+    static func generateDummyRecords() -> [MangoRecord] {
         var records: [MangoRecord] = []
         let calendar = Calendar.current
-        let now = Date()
+        
+        // Define exact target date: August 13, 2026
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 8
+        components.day = 13
+        guard let anchorDate = calendar.date(from: components) else { return [] }
 
-        for dayOffset in 0..<days {
-            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+        // Generate data for the past 150 days to cover full 3 previous months
+        for dayOffset in 0..<150 {
+            guard let targetDate = calendar.date(byAdding: .day, value: -dayOffset, to: anchorDate) else { continue }
             
-            // Variasi jumlah mangga per hari (60 s/d 140 mangga per hari)
-            let countForDay = Int.random(in: 60...140)
+            let countForDay = Int.random(in: 10...30)
             
             for _ in 0..<countForDay {
                 let minute = Int.random(in: 0...59)
                 let hour = Int.random(in: 8...17)
-                var components = calendar.dateComponents([.year, .month, .day], from: date)
-                components.hour = hour
-                components.minute = minute
-                guard let recordDate = calendar.date(from: components) else { continue }
+                var recordComponents = calendar.dateComponents([.year, .month, .day], from: targetDate)
+                recordComponents.hour = hour
+                recordComponents.minute = minute
+                guard let recordDate = calendar.date(from: recordComponents) else { continue }
 
                 // Distribusi Grade: A (35%), B (30%), C (25%), Reject (10%)
                 let roll = Int.random(in: 1...100)
@@ -129,3 +135,4 @@ enum DummyDataStore {
         return records.sorted(by: { $0.timestamp > $1.timestamp })
     }
 }
+

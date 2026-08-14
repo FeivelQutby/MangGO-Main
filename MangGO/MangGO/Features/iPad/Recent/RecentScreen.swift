@@ -1,4 +1,33 @@
 import SwiftUI
+import Charts
+
+/// Tampilan "Hasil Terbaru" (Recent Batch / Today's Summary)
+/// Iterasi 2: Layout 2 Kolom (Kiri: Stack Cards Total & Reject | Kanan: 2 Bar Charts + Tabel 4 Kolom)
+struct RecentScreen: View {
+
+    let records: [MangoRecord]
+
+    @State private var showingRejectedList = false
+    @State private var selectedDate = Date()
+    @State private var showingDatePicker = false
+
+    /// Filter data berdasarkan selectedDate
+    private var todayRecords: [MangoRecord] {
+        let calendar = Calendar.current
+        return records.filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+    }
+
+    private var totalCount: Int {
+        todayRecords.count
+    }
+
+    private var totalWeightKg: Double {
+        todayRecords.reduce(0.0) { $0 + $1.weightGrams } / 1000.0
+    }
+
+    private func count(for grade: GradeDisplay) -> Int {
+        todayRecords.filter { $0.grade == grade }.count
+    }
 
 enum RecentSortOption: String, CaseIterable, Identifiable {
     case newestTimestamp = "Timestamp Terbaru"
@@ -41,123 +70,154 @@ struct RecentScreen: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(red: 247/255, green: 247/255, blue: 248/255)
-                    .ignoresSafeArea()
-                
-                VStack(alignment: .leading, spacing: 20) {
-                    // MARK: - Header Bar
-                    HStack(spacing: 16) {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.black)
-                                .frame(width: 44, height: 44)
-                                .background(Color.white)
-                                .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Data Harian")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.black)
-                            Text("4 Apr, 2026")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
+        VStack(alignment: .leading, spacing: 0) {
+            // Header Tanggal (Fixed Top Header - Stay Freeze!)
+            Button(action: { showingDatePicker = true }) {
+                HStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
                     }
-                    
-                    // MARK: - Title & Sort Button (Khusus Recent Screen: Cuma Sort)
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Log Mangga Reject")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.black)
-                        
-                        Menu {
-                            Picker("Urutkan", selection: $selectedSort) {
-                                ForEach(RecentSortOption.allCases) { option in
-                                    Text(option.rawValue).tag(option)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("Urutkan")
-                                    .font(.system(size: 14, weight: .medium))
-                                Image(systemName: "line.3.horizontal.decrease")
-                                    .font(.system(size: 14))
-                            }
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color(red: 228/255, green: 228/255, blue: 229/255))
+
+                    HStack(spacing: 10) {
+                        Text(selectedDate.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 20))
+                            .foregroundStyle(.black)
                     }
-                    
-                    // MARK: - Reject Log Table
-                    VStack(spacing: 0) {
-                        // Header
-                        HStack {
-                            Text("Kode Mangga").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Tanggal").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Timestamp").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Berat").frame(maxWidth: .infinity, alignment: .center)
-                            Text("Tingkat Defect").frame(maxWidth: .infinity, alignment: .center)
-                            Spacer().frame(width: 80)
-                        }
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 16)
-                        .background(Color(red: 85/255, green: 85/255, blue: 85/255))
-                        
-                        // Rows
-                        ScrollView(.vertical, showsIndicators: false) {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(sortedRecords.enumerated()), id: \.element.id) { index, record in
-                                    HStack {
-                                        Text(record.formattedCode)
-                                            .font(.system(size: 14, weight: .bold))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text(formatDate(record.timestamp))
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text(formatTime(record.timestamp))
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text("\(Int(record.weightGrams))")
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Text("\(Int(record.defectPercent))%")
-                                            .font(.system(size: 14, weight: .regular))
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                        
-                                        Button(action: {
-                                            selectedRecordForDetail = record
-                                            navigateToDetail = true
-                                        }) {
-                                            Text("Detail")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundColor(.white)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 6)
-                                                .background(Color.blue)
-                                                .clipShape(Capsule())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Color.white)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .popover(isPresented: $showingDatePicker) {
+                DatePicker("Select Date", selection: $selectedDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .padding()
+                    .frame(width: 320, height: 340)
+                    .presentationCompactAdaptation(.popover)
+            }
+            .padding(.horizontal, 40)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(red: 242/255, green: 242/255, blue: 247/255))
+
+            // Scrollable Content Body
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    if todayRecords.isEmpty {
+                        EmptyStateView(
+                            title: "Belum Ada Data Harian Grading",
+                            subtitle: "Mulai batch baru untuk melihat data harian grading",
+                            icon: "shippingbox"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 450)
+                    } else {
+                        // Split Layout 2 Kolom
+                        HStack(alignment: .top, spacing: 32) {
+                            // ==========================================
+                            // KOLOM KIRI: Overview Total
+                            // ==========================================
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("Overview Total")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+
+                                // Card 1: Total Buah
+                                MetricSummaryCard(
+                                    title: "total mangga diperiksa",
+                                    value: "\(totalCount.formatted()) buah",
+                                    icon: "🥭"
+                                )
+
+                                // Card 2: Total Berat
+                                MetricSummaryCard(
+                                    title: "total berat mangga",
+                                    value: String(format: "%.1f kg", totalWeightKg),
+                                    icon: "⚖️"
+                                )
+
+                                // Card 3: Mangga Ter-Reject + Tombol "Periksa"
+                                RejectedSummaryCard(
+                                    count: count(for: .reject),
+                                    onPeriksa: { showingRejectedList = true }
+                                )
+                            }
+                            .frame(width: 360)
+
+                            // ==========================================
+                            // KOLOM KANAN: Hasil Grading Harian
+                            // ==========================================
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("Hasil Grading Harian")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+
+                                // Top Section: 2 Bar Charts Berdampingan
+                                HStack(spacing: 16) {
+                                    // Chart 1: Kuantitas (buah)
+                                    ChartContainerCard(title: "Kuantitas (buah)") {
+                                        Chart {
+                                            ForEach(GradeDisplay.allCases) { grade in
+                                                let val = count(for: grade)
+                                                BarMark(
+                                                    x: .value("Grade", grade == .reject ? "Reject" : "Grade \(grade.rawValue)"),
+                                                    y: .value("Jumlah", val),
+                                                    width: .ratio(0.5)
+                                                )
+                                                .foregroundStyle(grade.color)
+                                                .annotation(position: .top) {
+                                                    Text("\(val)")
+                                                        .font(.system(size: 14))
+                                                        .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                                                }
+                                            }
                                         }
-                                        .frame(width: 80, alignment: .center)
+                                        .chartYAxis {
+                                            AxisMarks(position: .leading)
+                                        }
+                                    }
+
+                                    // Chart 2: Berat (kg)
+                                    ChartContainerCard(title: "Berat (kg)") {
+                                        Chart {
+                                            ForEach(GradeDisplay.allCases) { grade in
+                                                let val = weightKg(for: grade)
+                                                BarMark(
+                                                    x: .value("Grade", grade == .reject ? "Reject" : "Grade \(grade.rawValue)"),
+                                                    y: .value("Berat", val),
+                                                    width: .ratio(0.5)
+                                                )
+                                                .foregroundStyle(grade.color)
+                                                .annotation(position: .top) {
+                                                    Text(String(format: "%.1f", val))
+                                                        .font(.system(size: 14))
+                                                        .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                                                }
+                                            }
+                                        }
+                                        .chartYAxis {
+                                            AxisMarks(position: .leading)
+                                        }
                                     }
                                     .padding(.vertical, 12)
                                     .padding(.horizontal, 16)
                                     .background(index % 2 == 0 ? Color.white : Color(red: 245/255, green: 245/255, blue: 247/255))
                                 }
+
+                                // Bottom Section: Tabel Ringkasan 4 Kolom
+                                GradeSummaryTableView(
+                                    records: todayRecords,
+                                    totalCount: totalCount,
+                                    countForGrade: { count(for: $0) },
+                                    weightForGrade: { weightKg(for: $0) },
+                                    percentageForGrade: { percentage(for: $0) }
+                                )
                             }
                         }
                     }
@@ -166,31 +226,163 @@ struct RecentScreen: View {
                     
                     Spacer()
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 20)
-            }
-            .navigationDestination(isPresented: $navigateToDetail) {
-                if let record = selectedRecordForDetail {
-                    RejectedMangoDetailView(selectedRecord: record, allRecords: records, contextTitle: "Data Harian")
-                }
+                .padding(.horizontal, 40)
+                .padding(.bottom, 40)
             }
         }
-        .navigationViewStyle(.stack)
-    }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "dd/MM/yyyy"
-        return formatter.string(from: date)
-    }
-    
-    private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: date)
+        .background(Color(red: 242/255, green: 242/255, blue: 247/255))
+        .fullScreenCover(isPresented: $showingRejectedList) {
+            RejectedMangoListView(
+                rejectedRecords: todayRecords.filter { $0.grade == .reject }
+            )
+        }
     }
 }
-#Preview("Recent Screen", traits: .landscapeLeft) {
-    RecentScreen()
+
+// MARK: - Subcomponents
+
+private struct MetricSummaryCard: View {
+    let title: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Text(icon).font(.system(size: 32))
+                Text(value)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.black)
+            }
+            Text(title)
+                .font(.system(size: 18))
+                .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+        }
+        .padding(.vertical, 28)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: .rect(cornerRadius: 24))
+    }
+}
+
+private struct RejectedSummaryCard: View {
+    let count: Int
+    let onPeriksa: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text("🗑️").font(.system(size: 32))
+                    Text("\(count.formatted()) buah")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+                Text("mangga reject")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+            }
+
+            Button(action: onPeriksa) {
+                Text("Periksa Detail")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue, in: .capsule)
+                    .foregroundStyle(.white)
+            }
+        }
+        .padding(.vertical, 28)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: .rect(cornerRadius: 24))
+    }
+}
+
+private struct ChartContainerCard<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text(title)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+            content()
+                .frame(height: 200)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background(Color.white, in: .rect(cornerRadius: 24))
+    }
+}
+
+private struct GradeSummaryTableView: View {
+    let records: [MangoRecord]
+    let totalCount: Int
+    let countForGrade: (GradeDisplay) -> Int
+    let weightForGrade: (GradeDisplay) -> Double
+    let percentageForGrade: (GradeDisplay) -> Double
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Table Header
+            HStack {
+                Text("Grade")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Kuantitas (buah)")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Berat Total (kg)")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Rasio")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(red: 142/255, green: 142/255, blue: 147/255)) // exact gray header from Figma
+
+            // Rows for Grade A, B, C, Reject
+            ForEach(Array(GradeDisplay.allCases.enumerated()), id: \.element) { index, grade in
+                HStack {
+                    Text(grade == .reject ? "Reject" : grade.rawValue)
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(countForGrade(grade).formatted())
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(String(format: "%.1f", weightForGrade(grade))) // weight column in kg
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(String(format: "%.0f%%", percentageForGrade(grade)))
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(index % 2 == 1 ? Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08) : Color.white)
+            }
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+    }
+}
+
+#Preview {
+    RecentScreen(records: DummyDataStore.generateDummyRecords())
 }
 

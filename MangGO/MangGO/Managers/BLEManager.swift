@@ -14,6 +14,8 @@ struct BLEMeasurement: Codable {
 }
 
 enum BLEEvent {
+    case loadCellReady
+    case servoReady
     case measurementStarted
     case capture1
     case capture2
@@ -111,6 +113,12 @@ final class BLEManager: NSObject, ObservableObject {
         print("ESP32 → iPhone: \(message)")
 
         switch message {
+            
+        case "LOAD_CELL_READY":
+            lastEvent = .loadCellReady
+
+        case "SERVO_READY":
+            lastEvent = .servoReady
 
         case "MEASUREMENT_STARTED":
 
