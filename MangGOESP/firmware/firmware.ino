@@ -37,6 +37,7 @@ NimBLECharacteristic* commandCharacteristic;
 NimBLECharacteristic* eventCharacteristic;
 
 bool deviceConnected = false;
+bool servoReady = false;
 
 // =========================
 // STATE MACHINE
@@ -233,8 +234,7 @@ class CommandCallbacks
 // BLE SERVER CALLBACK
 // =========================
 
-class ServerCallbacks
-    : public NimBLEServerCallbacks {
+class ServerCallbacks : public NimBLEServerCallbacks {
 
     void onConnect(
         NimBLEServer* server,
@@ -243,10 +243,38 @@ class ServerCallbacks
 
         deviceConnected = true;
 
-        Serial.println();
-        Serial.println(
-            "iPhone connected!"
-        );
+        Serial.println("iPhone connected!");
+
+        bool loadCellOK =
+            scale.wait_ready_timeout(500);
+
+        bool servoOK =
+            servoReady;
+
+        if (loadCellOK) {
+            Serial.println("HX711: READY");
+        } else {
+            Serial.println("HX711: NOT READY");
+        }
+
+        if (servoOK) {
+            Serial.println("Servo: READY");
+        } else {
+            Serial.println("Servo: NOT READY");
+        }
+
+        if (loadCellOK && servoOK) {
+
+            sendEvent(
+                "HARDWARE_READY"
+            );
+
+        } else {
+
+            Serial.println(
+                "Hardware check failed"
+            );
+        }
     }
 
     void onDisconnect(
@@ -261,8 +289,7 @@ class ServerCallbacks
             "iPhone disconnected!"
         );
 
-        NimBLEDevice::
-            getAdvertising()->start();
+        NimBLEDevice::getAdvertising()->start();
     }
 };
 
@@ -308,35 +335,34 @@ void setup() {
         16
     );
 
-    // Initial position
     setServoMicroseconds(500);
 
-    Serial.println(
-        "Servo ready"
-    );
+    servoReady = true;
+
+    Serial.println("Servo ready");
 
     // =========================
     // HX711
     // =========================
 
-    scale.begin(
-        HX711_DT,
-        HX711_SCK
-    );
+    scale.begin(HX711_DT, HX711_SCK);
 
-    scale.set_scale(
-        SCALE_FACTOR
-    );
+    scale.set_scale(SCALE_FACTOR);
 
-    Serial.println(
-        "Taring HX711..."
-    );
+    Serial.println("Checking HX711...");
 
-    scale.tare();
+    if (scale.wait_ready_timeout(1000)) {
 
-    Serial.println(
-        "HX711 ready"
-    );
+        Serial.println("HX711 ready");
+
+        scale.tare();
+
+        Serial.println("HX711 tared");
+
+    } else {
+
+        Serial.println("ERROR: HX711 not found");
+    }
 
     // =========================
     // BLE
