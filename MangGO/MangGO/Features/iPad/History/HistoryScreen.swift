@@ -2,74 +2,87 @@
 //  HistoryScreen.swift
 //  MangGO
 //
+//  Created from Figma Nodes 551:9204, 551:9287, 551:9367 (Tren 7 Hari, 30 Hari, 3 Bulan)
+//
 
 import SwiftUI
 import Charts
+import Combine
 
 /// Filter rentang waktu untuk Riwayat
 enum DateRangeFilter: String, CaseIterable, Identifiable {
-    case today = "Hari Esok"
-    case last7 = "7 Hari Terakhir"
-    case last14 = "14 Hari Terakhir"
-    case last30 = "30 Hari Terakhir"
-    case custom = "Kustom"
+    case last7 = "7 Hari"
+    case last30 = "30 Hari"
+    case last90 = "90 Hari"
 
     var id: String { rawValue }
 }
 
-/// Layar Riwayat (History Screen) dengan filter rentang waktu & grafik tren.
+/// Layar Riwayat & Tren (History & Trend Screen) sesuai Figma Spec
 struct HistoryScreen: View {
 
     let allRecords: [MangoRecord]
 
     @State private var selectedFilter: DateRangeFilter = .last7
-    @State private var selectedGradeFilter: GradeDisplay? = nil
-    @State private var startDate: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
-    @State private var endDate: Date = Date()
-    @State private var searchText = ""
+    @State private var selectedMetric: TrendMetric = .quantity
+    @State private var showingRejectedList = false
+    @State private var showingRangePicker = false
+    @State private var customAnchorDate: Date? = nil
+
+    enum TrendMetric: String, CaseIterable, Identifiable {
+        case quantity = "Kuantitas (buah)"
+        case weight = "Berat (kg)"
+
+        var id: String { rawValue }
+    }
+
+    /// Initializer opsional untuk set preset langsung dari parent
+    init(allRecords: [MangoRecord], initialPreset: DateRangeFilter = .last7) {
+        self.allRecords = allRecords
+        _selectedFilter = State(initialValue: initialPreset)
+    }
+
+    private var currentAnchorDate: Date {
+        customAnchorDate ?? allRecords.map(\.timestamp).max() ?? Date()
+    }
+
+    /// Start date calculation
+    private var startDate: Date {
+        let calendar = Calendar.current
+        let anchor = currentAnchorDate
+        switch selectedFilter {
+        case .last7:
+            return calendar.date(byAdding: .day, value: -6, to: anchor) ?? anchor
+        case .last30:
+            return calendar.date(byAdding: .day, value: -29, to: anchor) ?? anchor
+        case .last90:
+            return calendar.date(byAdding: .day, value: -89, to: anchor) ?? anchor
+        }
+    }
+
+    /// End date calculation
+    private var endDate: Date {
+        return currentAnchorDate
+    }
+
+    private var maxDate: Date {
+        allRecords.map(\.timestamp).max() ?? Date()
+    }
+
+    /// Subtitle string
+    private var dateRangeSubtitle: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM, yyyy"
+        formatter.locale = Locale(identifier: "id_ID")
+        return "Data tren pada tanggal \(formatter.string(from: startDate)) - \(formatter.string(from: endDate))"
+    }
 
     /// Records yang disaring berdasarkan tanggal
     private var dateFilteredRecords: [MangoRecord] {
         let calendar = Calendar.current
-        let now = Date()
-
-        switch selectedFilter {
-        case .today:
-            return allRecords.filter { calendar.isDate($0.timestamp, inSameDayAs: now) }
-        case .last7:
-            guard let from = calendar.date(byAdding: .day, value: -7, to: now) else { return allRecords }
-            return allRecords.filter { $0.timestamp >= from }
-        case .last14:
-            guard let from = calendar.date(byAdding: .day, value: -14, to: now) else { return allRecords }
-            return allRecords.filter { $0.timestamp >= from }
-        case .last30:
-            guard let from = calendar.date(byAdding: .day, value: -30, to: now) else { return allRecords }
-            return allRecords.filter { $0.timestamp >= from }
-        case .custom:
-            let start = calendar.startOfDay(for: startDate)
-            guard let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) else {
-                return allRecords
-            }
-            return allRecords.filter { $0.timestamp >= start && $0.timestamp <= end }
-        }
-    }
-
-    /// Records final yang juga disaring berdasarkan grade & search query
-    private var finalRecords: [MangoRecord] {
-        var result = dateFilteredRecords
-
-        if let selectedGradeFilter {
-            result = result.filter { $0.grade == selectedGradeFilter }
-        }
-
-        if !searchText.isEmpty {
-            result = result.filter {
-                $0.id.uuidString.localizedCaseInsensitiveContains(searchText) ||
-                ($0.rejectionReason?.localizedCaseInsensitiveContains(searchText) ?? false)
-            }
-        }
-
-        return result
+        let start = calendar.startOfDay(for: startDate)
+        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+        return allRecords.filter { $0.timestamp >= start && $0.timestamp <= end }
     }
 
     // MARK: - Metrics Calculations
@@ -80,262 +93,703 @@ struct HistoryScreen: View {
         dateFilteredRecords.reduce(0.0) { $0 + $1.weightGrams } / 1000.0
     }
 
-    private var avgWeightGrams: Double {
-        guard totalCount > 0 else { return 0 }
-        return dateFilteredRecords.reduce(0.0) { $0 + $1.weightGrams } / Double(totalCount)
+    private func count(for grade: GradeDisplay) -> Int {
+        dateFilteredRecords.filter { $0.grade == grade }.count
     }
 
-    private var passRatePercent: Double {
+    private func weightKg(for grade: GradeDisplay) -> Double {
+        dateFilteredRecords.filter { $0.grade == grade }.reduce(0.0) { $0 + $1.weightGrams } / 1000.0
+    }
+
+    private func percentage(for grade: GradeDisplay) -> Double {
         guard totalCount > 0 else { return 0 }
-        let passed = dateFilteredRecords.filter { $0.grade != .reject }.count
-        return (Double(passed) / Double(totalCount)) * 100.0
+        return (Double(count(for: grade)) / Double(totalCount)) * 100.0
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Header & Filter Bar
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Riwayat & Tren Grading")
-                        .font(.title.bold())
-
-                    HStack(spacing: 12) {
-                        // Segmented Control Rentang Waktu
-                        Picker("Rentang Waktu", selection: $selectedFilter) {
-                            ForEach(DateRangeFilter.allCases) { filter in
-                                Text(filter.rawValue).tag(filter)
-                            }
+        VStack(alignment: .leading, spacing: 0) {
+            // Header Selector Tanggal (Fixed Top Header - Stay Freeze!)
+            VStack(alignment: .leading, spacing: 6) {
+                Button(action: { showingRangePicker = true }) {
+                    HStack(spacing: 0) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
                         }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 550)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 228/255, green: 228/255, blue: 229/255))
 
-                        Spacer()
-
-                        if selectedFilter == .custom {
-                            HStack(spacing: 8) {
-                                DatePicker("Mulai", selection: $startDate, displayedComponents: .date)
-                                    .labelsHidden()
-                                Text("–").foregroundStyle(.secondary)
-                                DatePicker("Sampai", selection: $endDate, displayedComponents: .date)
-                                    .labelsHidden()
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+                        HStack(spacing: 10) {
+                            Text("Tren \(selectedFilter.rawValue)")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(.black)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingRangePicker) {
+                    DateRangePickerPopover(
+                        selectedFilter: $selectedFilter,
+                        anchorDate: $customAnchorDate,
+                        isPresented: $showingRangePicker,
+                        defaultAnchor: allRecords.map(\.timestamp).max() ?? Date()
+                    )
+                    .presentationCompactAdaptation(.popover)
                 }
 
-                // Summary KPI Cards
-                HStack(spacing: 16) {
-                    KpiTile(title: "Total Buah", value: "\(totalCount.formatted())", unit: "buah", icon: "🥭")
-                    KpiTile(title: "Total Berat", value: String(format: "%.1f", totalWeightKg), unit: "kg", icon: "⚖️")
-                    KpiTile(title: "Rata-rata Berat", value: String(format: "%.0f", avgWeightGrams), unit: "gram", icon: "📊")
-                    KpiTile(title: "Pass Rate", value: String(format: "%.1f", passRatePercent), unit: "%", icon: "✅",
-                            highlightColor: passRatePercent >= 85 ? .green : .orange)
-                }
+                Text(dateRangeSubtitle)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+            }
+            .padding(.horizontal, 40)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(red: 242/255, green: 242/255, blue: 247/255))
 
-                // Grafik Tren Volume Grading per Hari
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Grafik Tren Hasil Grading")
-                            .font(.title2.bold())
-                        Spacer()
-                        Text("\(dateFilteredRecords.count) sampel terdata")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+            // Scrollable Content Body (Hasil Grading & Akumulasi)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    if dateFilteredRecords.isEmpty {
+                        EmptyStateView(
+                            title: "Belum Ada Data Tren Grading",
+                            subtitle: "Mulai batch baru untuk melihat data tren grading",
+                            icon: "shippingbox"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 450)
+                    } else {
+                        // Split Layout 2 Kolom
+                        HStack(alignment: .top, spacing: 32) {
+                            // ==========================================
+                            // KOLOM KIRI: Overview Total
+                            // ==========================================
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("Overview Total")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
 
-                    Chart {
-                        ForEach(dailySummaries) { summary in
-                            BarMark(
-                                x: .value("Tanggal", summary.dateLabel),
-                                y: .value("Jumlah", summary.count)
-                            )
-                            .foregroundStyle(by: .value("Grade", summary.grade.rawValue))
-                        }
-                    }
-                    .chartForegroundStyleScale([
-                        "A": GradeDisplay.a.color,
-                        "B": GradeDisplay.b.color,
-                        "C": GradeDisplay.c.color,
-                        "Reject": GradeDisplay.reject.color
-                    ])
-                    .frame(height: 280)
-                    .padding(16)
-                    .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
-                }
+                                // Card 1: Total Buah + Trend Badge
+                                TrendMetricSummaryCard(
+                                    title: "total mangga diperiksa",
+                                    value: "\(totalCount.formatted()) buah",
+                                    icon: "🥭"
+                                )
 
-                // Log Detail Riwayat
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Daftar Riwayat Scan")
-                            .font(.title2.bold())
+                                // Card 2: Total Berat + Trend Badge
+                                TrendMetricSummaryCard(
+                                    title: "total berat mangga",
+                                    value: String(format: "%.1f kg", totalWeightKg),
+                                    icon: "⚖️"
+                                )
 
-                        Spacer()
-
-                        // Filter Grade
-                        HStack(spacing: 8) {
-                            FilterChip(title: "Semua", isSelected: selectedGradeFilter == nil) {
-                                selectedGradeFilter = nil
+                                // Card 3: Mangga Ter-Reject + Tombol "Periksa Detail"
+                                TrendRejectedSummaryCard(
+                                    count: count(for: .reject),
+                                    onPeriksa: { showingRejectedList = true }
+                                )
                             }
-                            ForEach(GradeDisplay.allCases) { grade in
-                                FilterChip(title: grade.rawValue, isSelected: selectedGradeFilter == grade, color: grade.color) {
-                                    selectedGradeFilter = grade
+                            .frame(width: 360)
+
+                            // ==========================================
+                            // KOLOM KANAN: Hasil Grading & Akumulasi
+                            // ==========================================
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("Hasil Grading")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+
+                                // Card 1: Stacked Bar Chart with Metric Segmented Control
+                                VStack(spacing: 20) {
+                                    Picker("", selection: $selectedMetric) {
+                                        ForEach(TrendMetric.allCases) { metric in
+                                            Text(metric.rawValue).tag(metric)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .frame(width: 320)
+
+                                    Chart {
+                                        // Bar chart elements stacked
+                                        ForEach(stackedChartData) { item in
+                                            BarMark(
+                                                x: .value("Tanggal", item.dateLabel),
+                                                y: .value("Nilai", item.value),
+                                                width: .ratio(0.4)
+                                            )
+                                            .foregroundStyle(by: .value("Grade", item.grade.rawValue))
+                                        }
+                                        
+                                        // Line chart for Reject overlay
+                                        ForEach(stackedChartData.filter { $0.grade == .reject }) { item in
+                                            LineMark(
+                                                x: .value("Tanggal", item.dateLabel),
+                                                y: .value("Reject Line", item.value)
+                                            )
+                                            .foregroundStyle(Color.red)
+                                            .lineStyle(StrokeStyle(lineWidth: 3))
+                                            .symbol {
+                                                Circle()
+                                                    .fill(Color.red)
+                                                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                                                    .frame(width: 8, height: 8)
+                                            }
+                                        }
+                                    }
+                                    .chartForegroundStyleScale(
+                                        domain: [GradeDisplay.reject.rawValue, GradeDisplay.c.rawValue, GradeDisplay.b.rawValue, GradeDisplay.a.rawValue],
+                                        range: [GradeDisplay.reject.color, GradeDisplay.c.color, GradeDisplay.b.color, GradeDisplay.a.color]
+                                    )
+                                    .chartLegend(.hidden)
+                                    .chartYAxis {
+                                        AxisMarks(position: .leading)
+                                    }
+                                    .frame(height: 240)
+                                    
+                                    // Custom Legend
+                                    HStack(spacing: 24) {
+                                        ForEach([GradeDisplay.a, GradeDisplay.b, GradeDisplay.c, GradeDisplay.reject], id: \.self) { grade in
+                                            HStack(spacing: 8) {
+                                                Circle()
+                                                    .fill(grade.color)
+                                                    .frame(width: 12, height: 12)
+                                                Text(grade == .reject ? "Reject" : "Grade \(grade.rawValue)")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                }
+                                .padding(24)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.white, in: .rect(cornerRadius: 24))
+
+                                // Card 2: Tabel Akumulasi (Akumulasi 7 Hari / 30 Hari / 3 Bulan)
+                                VStack(alignment: .leading, spacing: 16) {
+                                    Text("Akumulasi \(selectedFilter.rawValue)")
+                                        .font(.system(size: 20, weight: .bold))
+                                        .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
+
+                                    GradeSummaryTableView(
+                                        records: dateFilteredRecords,
+                                        totalCount: totalCount,
+                                        countForGrade: { count(for: $0) },
+                                        weightForGrade: { weightKg(for: $0) },
+                                        percentageForGrade: { percentage(for: $0) }
+                                    )
                                 }
                             }
                         }
                     }
+                }
+                .padding(.horizontal, 40)
+                .padding(.bottom, 40)
+            }
+        }
+        .background(Color(red: 242/255, green: 242/255, blue: 247/255))
+        .fullScreenCover(isPresented: $showingRejectedList) {
+            RejectedMangoListView(
+                rejectedRecords: dateFilteredRecords.filter { $0.grade == .reject }
+            )
+        }
+    }
 
-                    // Log Table
-                    LazyVStack(spacing: 10) {
-                        ForEach(finalRecords.prefix(50)) { record in
-                            HistoryRecordRow(record: record)
+    // MARK: - Stacked Chart Data Aggregation
+
+    private struct StackedChartItem: Identifiable {
+        var id: String { "\(dateLabel)-\(grade.rawValue)" }
+        let dateLabel: String
+        let grade: GradeDisplay
+        let value: Double
+    }
+
+    private var stackedChartData: [StackedChartItem] {
+        let calendar = Calendar.current
+        let anchorStart = calendar.startOfDay(for: startDate)
+        
+        var groupMap: [Int: [GradeDisplay: Double]] = [:]
+        
+        for record in dateFilteredRecords {
+            let val = selectedMetric == .quantity ? 1.0 : (record.weightGrams / 1000.0)
+            let index: Int
+            
+            if selectedFilter == .last7 {
+                index = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
+            } else if selectedFilter == .last30 {
+                let dayDiff = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
+                index = max(0, min(4, dayDiff / 6))
+            } else {
+                let dayDiff = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
+                index = max(0, min(5, dayDiff / 15))
+            }
+            
+            groupMap[index, default: [:]][record.grade, default: 0.0] += val
+        }
+        
+        let maxIndex: Int
+        if selectedFilter == .last7 { maxIndex = 6 }
+        else if selectedFilter == .last30 { maxIndex = 4 }
+        else { maxIndex = 5 }
+        
+        var items: [StackedChartItem] = []
+        for i in 0...maxIndex {
+            let label = labelForGroup(index: i, anchorStart: anchorStart, filter: selectedFilter)
+            let gradeDict = groupMap[i] ?? [:]
+            for grade in [GradeDisplay.reject, GradeDisplay.c, GradeDisplay.b, GradeDisplay.a] {
+                let val = gradeDict[grade] ?? 0.0
+                items.append(StackedChartItem(dateLabel: label, grade: grade, value: val))
+            }
+        }
+        return items
+    }
+    
+    private func labelForGroup(index: Int, anchorStart: Date, filter: DateRangeFilter) -> String {
+        let calendar = Calendar.current
+        if filter == .last7 {
+            let d = calendar.date(byAdding: .day, value: index, to: anchorStart)!
+            let fmt = DateFormatter()
+            fmt.dateFormat = "d MMM"
+            return fmt.string(from: d)
+        } else if filter == .last30 {
+            let start = calendar.date(byAdding: .day, value: index * 6, to: anchorStart)!
+            let end = calendar.date(byAdding: .day, value: 5, to: start)!
+            let fmtDay = DateFormatter()
+            fmtDay.dateFormat = "d"
+            let fmtDayMonth = DateFormatter()
+            fmtDayMonth.dateFormat = "d MMM"
+            if calendar.component(.month, from: start) == calendar.component(.month, from: end) {
+                return "\(fmtDay.string(from: start))-\(fmtDayMonth.string(from: end))"
+            } else {
+                return "\(fmtDayMonth.string(from: start)) - \(fmtDayMonth.string(from: end))"
+            }
+        } else {
+            let start = calendar.date(byAdding: .day, value: index * 15, to: anchorStart)!
+            let end = calendar.date(byAdding: .day, value: 14, to: start)!
+            let fmtDay = DateFormatter()
+            fmtDay.dateFormat = "d"
+            let fmtDayMonth = DateFormatter()
+            fmtDayMonth.dateFormat = "d MMM"
+            if calendar.component(.month, from: start) == calendar.component(.month, from: end) {
+                return "\(fmtDay.string(from: start))-\(fmtDayMonth.string(from: end))"
+            } else {
+                return "\(fmtDayMonth.string(from: start)) - \(fmtDayMonth.string(from: end))"
+            }
+        }
+    }
+}
+
+// MARK: - Tren Subcomponents
+
+private struct TrendMetricSummaryCard: View {
+    let title: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text(icon).font(.system(size: 32))
+                    Text(value)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+                Text(title)
+                    .font(.system(size: 18))
+                    .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+            }
+        }
+        .padding(.vertical, 24)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: .rect(cornerRadius: 24))
+    }
+}
+
+private struct TrendRejectedSummaryCard: View {
+    let count: Int
+    let onPeriksa: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        Text("🗑️").font(.system(size: 32))
+                        Text("\(count.formatted()) buah")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundStyle(.black)
+                    }
+                    Text("mangga reject")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+                }
+            }
+
+            Button(action: onPeriksa) {
+                Text("Periksa Detail")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue, in: .capsule)
+                    .foregroundStyle(.white)
+            }
+        }
+        .padding(.vertical, 24)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: .rect(cornerRadius: 24))
+    }
+}
+
+// MARK: - DateRangePickerPopover
+
+class DateRangePickerViewModel: ObservableObject {
+    @Published var pendingFilter: DateRangeFilter
+    @Published var pendingAnchorDate: Date
+    
+    init(filter: DateRangeFilter, anchor: Date) {
+        self.pendingFilter = filter
+        self.pendingAnchorDate = anchor
+    }
+}
+
+struct DateRangePickerPopover: View {
+    @Binding var selectedFilter: DateRangeFilter
+    @Binding var anchorDate: Date?
+    @Binding var isPresented: Bool
+    
+    @StateObject private var model: DateRangePickerViewModel
+    
+    init(selectedFilter: Binding<DateRangeFilter>, anchorDate: Binding<Date?>, isPresented: Binding<Bool>, defaultAnchor: Date) {
+        self._selectedFilter = selectedFilter
+        self._anchorDate = anchorDate
+        self._isPresented = isPresented
+        
+        let initialFilter = selectedFilter.wrappedValue
+        let initialAnchor = anchorDate.wrappedValue ?? defaultAnchor
+        self._model = StateObject(wrappedValue: DateRangePickerViewModel(filter: initialFilter, anchor: initialAnchor))
+    }
+    
+    var computedStartDate: Date {
+        let calendar = Calendar.current
+        switch model.pendingFilter {
+        case .last7:
+            return calendar.date(byAdding: .day, value: -6, to: model.pendingAnchorDate) ?? model.pendingAnchorDate
+        case .last30:
+            return calendar.date(byAdding: .day, value: -29, to: model.pendingAnchorDate) ?? model.pendingAnchorDate
+        case .last90:
+            return calendar.date(byAdding: .day, value: -89, to: model.pendingAnchorDate) ?? model.pendingAnchorDate
+        }
+    }
+    
+    var computedEndDate: Date {
+        return model.pendingAnchorDate
+    }
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            // LEFT SIDEBAR
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Rentang Waktu")
+                    .font(.system(size: 18, weight: .bold))
+                    .padding(.top, 24)
+                    .padding(.horizontal, 20)
+                
+                VStack(spacing: 4) {
+                    ForEach([DateRangeFilter.last7, DateRangeFilter.last30, DateRangeFilter.last90], id: \.self) { filter in
+                        Button(action: { model.pendingFilter = filter }) {
+                            Text(filter.rawValue)
+                                .font(.system(size: 16, weight: model.pendingFilter == filter ? .semibold : .regular))
+                                .foregroundStyle(model.pendingFilter == filter ? Color.blue : Color.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                                .background(model.pendingFilter == filter ? Color(red: 224/255, green: 241/255, blue: 255/255) : Color.clear, in: .rect(cornerRadius: 8))
                         }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                Spacer()
+            }
+            .frame(width: 190)
+            .background(Color(white: 0.98))
+            
+            Divider()
+            
+            // RIGHT SIDE (Calendar & Buttons)
+            VStack(alignment: .leading, spacing: 0) {
+                // Top Date Range labels
+                HStack(spacing: 12) {
+                    dateLabel(date: computedStartDate)
+                    Text("-")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                    dateLabel(date: computedEndDate)
+                }
+                .padding(.top, 24)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+                
+                Divider()
+                
+                // Graphical DatePicker
+                CustomRangeCalendar(
+                    anchorDate: $model.pendingAnchorDate,
+                    rangeFilter: model.pendingFilter,
+                    startDate: computedStartDate,
+                    endDate: computedEndDate
+                )
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+                
+                Divider()
+                
+                // Bottom Buttons
+                HStack(spacing: 16) {
+                    Spacer()
+                    Button("Cancel") {
+                        isPresented = false
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Color.blue)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Color(white: 0.93), in: .capsule)
+                    
+                    Button("Apply") {
+                        selectedFilter = model.pendingFilter
+                        anchorDate = model.pendingAnchorDate
+                        isPresented = false
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Color.blue, in: .capsule)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+            }
+            .frame(width: 390)
+            .background(Color.white)
+        }
+        .frame(width: 581, height: 530)
+        .background(Color.white)
+    }
+    
+    private func dateLabel(date: Date) -> some View {
+        let dayNumber = Calendar.current.component(.day, from: date)
+        let iconName = "\(dayNumber).square"
+        return HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .foregroundStyle(Color(red: 142/255, green: 142/255, blue: 147/255))
+                .font(.system(size: 18))
+            Text(date.formatted(.dateTime.month(.abbreviated).day().year()))
+                .font(.system(size: 16))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(red: 228/255, green: 228/255, blue: 229/255), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - CustomRangeCalendar
+
+struct CustomRangeCalendar: View {
+    @Binding var anchorDate: Date
+    let rangeFilter: DateRangeFilter
+    let startDate: Date
+    let endDate: Date
+    
+    @State private var monthBaseDate: Date = Date()
+    
+    let daysOfWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // Header
+            HStack {
+                Text(monthBaseDate.formatted(.dateTime.month().year()))
+                    .font(.system(size: 18, weight: .bold))
+                Spacer()
+                HStack(spacing: 24) {
+                    Button(action: { shiftMonth(by: -1) }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: { shiftMonth(by: 1) }) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.bottom, 4)
+            
+            // Days of week
+            HStack {
+                ForEach(daysOfWeek, id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            
+            // Grid
+            let gridDays = getGridDays()
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+            
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(gridDays, id: \.date) { day in
+                    if day.isCurrentMonth {
+                        let isSelected = isInRange(day.date)
+                        let isAnchor = Calendar.current.isDate(day.date, inSameDayAs: anchorDate)
+                        
+                        Button(action: {
+                            anchorDate = day.date
+                        }) {
+                            Text("\(Calendar.current.component(.day, from: day.date))")
+                                .font(.system(size: 15, weight: isAnchor ? .bold : .regular))
+                                .foregroundStyle(isAnchor ? .white : (isSelected ? Color.blue : .primary))
+                                .frame(width: 36, height: 36)
+                                .background(
+                                    isAnchor ? Color.blue : (isSelected ? Color(red: 224/255, green: 241/255, blue: 255/255) : Color.clear),
+                                    in: .circle
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text("")
+                            .frame(width: 36, height: 36)
                     }
                 }
             }
-            .padding(24)
         }
-        .background(Color(.systemGroupedBackground))
-        .searchable(text: $searchText, prompt: "Cari ID scan atau alasan reject...")
+        .onAppear {
+            monthBaseDate = anchorDate
+        }
     }
-
-    // Helper data summary untuk SwiftCharts
-    private var dailySummaries: [DailyGradeSummary] {
-        let calendar = Calendar.current
-        var map: [String: [GradeDisplay: Int]] = [:]
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-
-        for record in dateFilteredRecords {
-            let dayKey = formatter.string(from: record.timestamp)
-            map[dayKey, default: [:]][record.grade, default: 0] += 1
+    
+    private func shiftMonth(by value: Int) {
+        if let newDate = Calendar.current.date(byAdding: .month, value: value, to: monthBaseDate) {
+            monthBaseDate = newDate
         }
-
-        var summaries: [DailyGradeSummary] = []
-        for (dateLabel, gradeCounts) in map {
-            for (grade, count) in gradeCounts {
-                summaries.append(DailyGradeSummary(dateLabel: dateLabel, grade: grade, count: count))
-            }
+    }
+    
+    private func isInRange(_ date: Date) -> Bool {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: startDate)
+        let end = cal.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+        return date >= start && date <= end
+    }
+    
+    struct GridDay {
+        let date: Date
+        let isCurrentMonth: Bool
+    }
+    
+    private func getGridDays() -> [GridDay] {
+        let cal = Calendar.current
+        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: monthBaseDate))!
+        let firstWeekday = cal.component(.weekday, from: startOfMonth)
+        let offset = firstWeekday - 1
+        
+        let startOfGrid = cal.date(byAdding: .day, value: -offset, to: startOfMonth)!
+        
+        var days: [GridDay] = []
+        for i in 0..<42 {
+            let date = cal.date(byAdding: .day, value: i, to: startOfGrid)!
+            let isCurrentMonth = cal.component(.month, from: date) == cal.component(.month, from: monthBaseDate)
+            days.append(GridDay(date: date, isCurrentMonth: isCurrentMonth))
         }
-        return summaries.sorted(by: { $0.dateLabel < $1.dateLabel })
+        return days
     }
 }
 
-// MARK: - Helper Views & Models
-
-private struct DailyGradeSummary: Identifiable {
-    var id: String { "\(dateLabel)-\(grade.rawValue)" }
-    let dateLabel: String
-    let grade: GradeDisplay
-    let count: Int
-}
-
-private struct KpiTile: View {
-    let title: String
-    let value: String
-    let unit: String
-    let icon: String
-    var highlightColor: Color? = nil
+private struct GradeSummaryTableView: View {
+    let records: [MangoRecord]
+    let totalCount: Int
+    let countForGrade: (GradeDisplay) -> Int
+    let weightForGrade: (GradeDisplay) -> Double
+    let percentageForGrade: (GradeDisplay) -> Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(spacing: 0) {
+            // Table Header
             HStack {
-                Text(icon).font(.title3)
-                Spacer()
-                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text("Grade")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Kuantitas (buah)")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Berat Total (kg)")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Rasio")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(.title.bold())
-                    .foregroundStyle(highlightColor ?? .primary)
-                Text(unit)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(red: 142/255, green: 142/255, blue: 147/255))
+
+            // Rows for Grade A, B, C, Reject
+            ForEach(Array(GradeDisplay.allCases.enumerated()), id: \.element) { index, grade in
+                HStack {
+                    Text(grade == .reject ? "Reject" : grade.rawValue)
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(countForGrade(grade).formatted())
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(String(format: "%.1f", weightForGrade(grade)))
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Text(String(format: "%.0f%%", percentageForGrade(grade)))
+                        .font(.system(size: 20))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(index % 2 == 1 ? Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08) : Color.white)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground), in: .rect(cornerRadius: 16))
-    }
-}
-
-private struct FilterChip: View {
-    let title: String
-    let isSelected: Bool
-    var color: Color = .blue
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(isSelected ? color : Color(.secondarySystemBackground))
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .clipShape(Capsule())
-        }
-    }
-}
-
-private struct HistoryRecordRow: View {
-    let record: MangoRecord
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Text("Grade \(record.grade.rawValue)")
-                .font(.subheadline.bold())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(record.grade.color.opacity(0.2))
-                .foregroundStyle(record.grade == .c ? Color.black : record.grade.color)
-                .clipShape(Capsule())
-                .frame(width: 90)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ID: \(record.id.uuidString.prefix(8))")
-                    .font(.headline)
-                Text(record.timestamp.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            HStack(spacing: 24) {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(record.weightGrams)) g")
-                        .font(.subheadline.bold())
-                    Text("Berat")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(record.volumeCm3)) cm³")
-                        .font(.subheadline.bold())
-                    Text("Volume")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(String(format: "%.1f%%", record.defectPercent))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(record.defectPercent > 15 ? .red : .primary)
-                    Text("Bintik Defek")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(16)
-        .background(Color(.systemBackground), in: .rect(cornerRadius: 14))
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 }
 
 #Preview {
-    HistoryScreen(allRecords: DummyDataStore.generateDummyRecords(days: 30))
+    HistoryScreen(allRecords: DummyDataStore.generateDummyRecords())
 }

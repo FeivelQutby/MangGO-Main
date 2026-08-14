@@ -184,9 +184,10 @@ private struct MetricDetailTile: View {
 }
 
 #Preview {
-    let dummies = DummyDataStore.generateDummyRecords(days: 1).filter { $0.grade == .reject }
+    let dummies = DummyDataStore.generateDummyRecords().filter { $0.grade == .reject }
     RejectedMangoDetailView(
         allRejected: dummies,
         initialRecord: dummies.first ?? MangoRecord(grade: .reject, weightGrams: 138, volumeCm3: 180, blushPercent: 0, defectPercent: 78, rejectionReason: "Defect tinggi")
     )
 }
+
