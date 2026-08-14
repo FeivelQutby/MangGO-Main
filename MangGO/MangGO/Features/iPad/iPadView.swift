@@ -59,7 +59,7 @@ struct iPadView: View {
                           isLinked: sync.isLinked,
                           connectionError: sync.lastError)
         case .recent:
-            RecentScreen(records: dummyRecords)
+            RecentScreen()
         case .history:
             HistoryScreen(allRecords: dummyRecords)
         }
