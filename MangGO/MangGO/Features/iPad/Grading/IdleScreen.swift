@@ -1,7 +1,12 @@
 import SwiftUI
 
 struct IdleScreenView: View {
+    let snapshot: StationSnapshot
     @State private var selectedTab: Int = 0
+    @Environment(StationSync.self) private var sync
+    private var sensors: StationSnapshot.Sensors {
+        sync.snapshot.sensors
+    }
     
     var body: some View {
         ZStack {
@@ -10,10 +15,6 @@ struct IdleScreenView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 36) {
-                // Top Segmented Bar / Navigation Bar
-                topTabBar
-                    .padding(.top, 20)
-                
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 40) {
                         // Section 1: Status Sensor
@@ -29,43 +30,6 @@ struct IdleScreenView: View {
         }
     }
     
-    // MARK: - Top Tab Bar
-    private var topTabBar: some View {
-        HStack(spacing: 0) {
-            tabButton(title: "Grading", index: 0)
-            tabButton(title: "Data Harian", index: 1)
-            tabButton(title: "Tren", index: 2)
-        }
-        .padding(4)
-        .background(Color.white.opacity(0.8))
-        .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
-        .frame(width: 500)
-    }
-    
-    private func tabButton(title: String, index: Int) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedTab = index
-            }
-        }) {
-            Text(title)
-                .font(.system(size: 15, weight: selectedTab == index ? .semibold : .medium))
-                .foregroundColor(selectedTab == index ? .black : .gray)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    ZStack {
-                        if selectedTab == index {
-                            Capsule()
-                                .fill(Color(red: 232/255, green: 234/255, blue: 238/255))
-                                .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                )
-        }
-    }
-    
     // MARK: - Sensor Status Section
     private var sensorStatusSection: some View {
         VStack(spacing: 20) {
@@ -74,32 +38,33 @@ struct IdleScreenView: View {
                 .foregroundColor(.black)
             
             HStack(spacing: 16) {
+
                 SensorCardView(
                     icon: "scale.3d",
                     title: "Load Cell",
-                    status: "Terhubung",
-                    state: .connected
+                    status: sensorStatus(sensors.loadCell),
+                    state: sensorState(sensors.loadCell)
                 )
-                
+
                 SensorCardView(
                     icon: "gearshape",
                     title: "Servo",
-                    status: "Terhubung",
-                    state: .connected
+                    status: sensorStatus(sensors.servo),
+                    state: sensorState(sensors.servo)
                 )
-                
+
                 SensorCardView(
                     icon: "camera",
                     title: "Kamera",
-                    status: "Gagal Terhubung",
-                    state: .failed
+                    status: sensorStatus(sensors.camera),
+                    state: sensorState(sensors.camera)
                 )
-                
+
                 SensorCardView(
                     icon: "wave.3.right",
                     title: "Bluetooth",
-                    status: "Menunggu...",
-                    state: .waiting
+                    status: sensorStatus(sensors.bluetooth),
+                    state: sensorState(sensors.bluetooth)
                 )
             }
             .padding(20)
@@ -108,6 +73,39 @@ struct IdleScreenView: View {
             .shadow(color: Color.black.opacity(0.05), radius: 15, x: 0, y: 6)
         }
         .frame(maxWidth: 800)
+    }
+    
+    private func sensorState(
+        _ state: StationSnapshot.Sensors.State
+    ) -> SensorState {
+
+        switch state {
+
+        case .ready:
+            return .connected
+
+        case .waiting:
+            return .waiting
+
+        case .offline:
+            return .failed
+        }
+    }
+    
+    private func sensorStatus(
+        _ state: StationSnapshot.Sensors.State
+    ) -> String {
+
+        switch state {
+        case .ready:
+            return "Terhubung"
+
+        case .waiting:
+            return "Menunggu..."
+
+        case .offline:
+            return "Gagal Terhubung"
+        }
     }
     
     // MARK: - Grading Steps Section
@@ -171,6 +169,22 @@ enum SensorState {
         case .connected: return "checkmark.circle"
         case .failed: return "xmark.circle"
         case .waiting: return "arrow.clockwise"
+        }
+    }
+    
+    private func sensorState(
+        _ state: StationSnapshot.Sensors.State
+    ) -> SensorState {
+
+        switch state {
+        case .ready:
+            return .connected
+
+        case .waiting:
+            return .waiting
+
+        case .offline:
+            return .failed
         }
     }
 }
@@ -246,5 +260,10 @@ struct StepCardView: View {
 
 // MARK: - Preview
 #Preview(traits: .landscapeLeft) {
-    IdleScreenView()
+    IdleScreenView(
+        snapshot: StationSnapshot(
+            sensors: .allReady
+        )
+    )
+    .environment(StationSync(role: .display))
 }
