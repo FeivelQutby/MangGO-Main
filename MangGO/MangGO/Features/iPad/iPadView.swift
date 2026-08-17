@@ -21,7 +21,10 @@ struct iPadView: View {
     @Environment(StationSync.self) private var sync
     @State private var tab: Tab = .grading
 
+    // DUMMY DATA
     @State private var dummyRecords: [MangoRecord] = DummyDataStore.generateDummyRecords()
+    // REAL DATA (Pilih salah satu)
+    @State private var recordStore = MangoRecordStore()
 
     private var snapshot: StationSnapshot { sync.snapshot }
 
@@ -33,6 +36,10 @@ struct iPadView: View {
         let calendar = Calendar.current
         let today = Date()
         return dummyRecords.filter { calendar.isDate($0.timestamp, inSameDayAs: today) }
+    }
+    
+    private var records: [MangoRecord] {
+        recordStore.records
     }
 
     var body: some View {
@@ -67,6 +74,9 @@ struct iPadView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: snapshot.phase)
+        .onChange(of: snapshot.lastResult?.id) { _, _ in
+                saveLatestResult()
+            }
     }
 
     @ViewBuilder
@@ -77,28 +87,72 @@ struct iPadView: View {
                           isLinked: sync.isLinked,
                           connectionError: sync.lastError)
 
+//        DUMMY DATA
+//        case .dataHarian:
+//            if dummyRecords.isEmpty {
+//                EmptyStateView(
+//                    title: "Belum Ada Data Harian Grading",
+//                    subtitle: "Mulai batch baru untuk melihat data harian grading",
+//                    icon: "shippingbox"
+//                )
+//            } else {
+//                RecentScreen(records: dummyRecords)
+//            }
+            
+//      REAL DATA (Pilih salah satu)
         case .dataHarian:
-            if dummyRecords.isEmpty {
+            if records.isEmpty {
                 EmptyStateView(
                     title: "Belum Ada Data Harian Grading",
                     subtitle: "Mulai batch baru untuk melihat data harian grading",
                     icon: "shippingbox"
                 )
             } else {
-                RecentScreen(records: dummyRecords)
+                RecentScreen(records: records)
             }
 
+//        case .tren:
+//            if dummyRecords.isEmpty {
+//                EmptyStateView(
+//                    title: "Belum Ada Data Tren Grading",
+//                    subtitle: "Mulai batch baru untuk melihat data tren grading",
+//                    icon: "shippingbox"
+//                )
+//            } else {
+//                HistoryScreen(allRecords: dummyRecords)
+//            }
+            
         case .tren:
-            if dummyRecords.isEmpty {
+            if records.isEmpty {
                 EmptyStateView(
                     title: "Belum Ada Data Tren Grading",
                     subtitle: "Mulai batch baru untuk melihat data tren grading",
                     icon: "shippingbox"
                 )
             } else {
-                HistoryScreen(allRecords: dummyRecords)
+                HistoryScreen(allRecords: records)
             }
         }
+    }
+    
+    private func saveLatestResult() {
+        guard snapshot.phase == .done,
+              let result = snapshot.lastResult,
+              let grade = GradeDisplay(rawValue: result.grade)
+        else {
+            return
+        }
+
+        let record = MangoRecord(
+            id: result.id,
+            timestamp: result.gradedAt,
+            grade: grade,
+            weightGrams: result.weightGrams ?? 0,
+            defectPercent: result.defectPercent ?? 0,
+            rejectionReason: result.reason
+        )
+
+        recordStore.add(record)
     }
 }
 

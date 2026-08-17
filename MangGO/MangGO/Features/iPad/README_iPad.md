@@ -74,8 +74,7 @@ di-`#Preview` sendirian tanpa nyalain koneksi.
 | `sensors` | `Sensors` | `loadCell`, `tof`, `camera`, `bluetooth`, masing-masing `ready` / `waiting` / `offline`. |
 | `updatedAt` | `Date` | Dipakai buang paket basi. Jangan diandalkan buat "berapa lama sejak update terakhir" — jamnya beda device. |
 
-`Result` isinya: `grade` (String), `reason` (String?), `weightGrams`,
-`volumeCm3`, `blushPercent`, `defectPercent` — **semua angkanya `Double?`**,
+`Result` isinya: `grade` (String), `reason` (String?), `weightGrams`, `defectPercent` — **semua angkanya `Double?`**,
 karena sensor bisa gagal baca satu nilai tapi grading tetap jalan. Selalu
 tangani `nil`-nya (`MetricTile` sudah, dia nampilin "—").
 

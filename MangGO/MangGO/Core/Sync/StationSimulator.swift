@@ -51,11 +51,10 @@ struct SimulatorPanel: View {
         counts[grade.rawValue, default: 0] += 1
         var snap = snapshot(.done)
         snap.lastResult = .init(
+            id: UUID(),
             grade: grade.rawValue,
             reason: grade == .a ? nil : "Bintik melebihi ambang batas",
             weightGrams: .random(in: 300...500),
-            volumeCm3: .random(in: 250...520),
-            blushPercent: .random(in: 2...38),
             defectPercent: .random(in: 0...25),
             gradedAt: .now
         )

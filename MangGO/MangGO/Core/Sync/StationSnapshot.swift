@@ -67,16 +67,14 @@ struct StationSnapshot: Codable, Sendable, Equatable {
     }
 
     struct Result: Codable, Sendable, Equatable {
+        var id: UUID
         var grade: String
         var reason: String?
         var score: Double?
         var weightGrams: Double?
-        var volumeCm3: Double?
-        var blushPercent: Double?
         var defectPercent: Double?
         var gradedAt: Date
     }
-
     var phase: Phase = .idle
     var lastResult: Result?
     var counts: [String: Int] = [:]

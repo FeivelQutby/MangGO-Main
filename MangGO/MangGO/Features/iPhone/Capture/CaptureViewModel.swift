@@ -149,14 +149,13 @@ final class CaptureViewModel {
     
     private func stationResult(from result: GradeResult) -> StationSnapshot.Result {
         StationSnapshot.Result(
+            id: result.id,
             grade: result.grade.displayCode,
             reason: result.disqualificationReason ?? result.limitingFactors.first.map {
                 "\($0.indicator.displayName): \($0.detail)"
             },
             score: result.totalScore,
             weightGrams: sample.mass,
-            volumeCm3: sample.volume,
-            blushPercent: sample.color?.blushCoverage,
             defectPercent: sample.spotCoverage,
             gradedAt: result.evaluatedAt
         )

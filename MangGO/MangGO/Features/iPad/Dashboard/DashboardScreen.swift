@@ -42,9 +42,8 @@ struct DashboardScreen: View {
 #Preview {
     DashboardScreen(snapshot: StationSnapshot(
         phase: .done,
-        lastResult: .init(grade: "B", reason: "Bintik: 11.4% permukaan",
-                          weightGrams: 372, volumeCm3: 318,
-                          blushPercent: 9, defectPercent: 11.4, gradedAt: .now),
+        lastResult: .init(id: UUID(), grade: "B", reason: "Bintik: 11.4% permukaan",
+                          weightGrams: 372, defectPercent: 11.4, gradedAt: .now),
         counts: ["A": 12, "B": 5, "C": 2, "Reject": 1],
         sensors: .allReady,
         updatedAt: .now

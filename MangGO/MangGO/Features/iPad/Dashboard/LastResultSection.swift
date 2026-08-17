@@ -10,9 +10,9 @@ import SwiftUI
 /// Detail buah terakhir yang selesai dinilai: angka mentahnya plus alasan
 /// kenapa grade-nya turun (kalau ada).
 struct LastResultSection: View {
-
+    
     let result: StationSnapshot.Result?
-
+    
     var body: some View {
         if let result {
             VStack(alignment: .leading, spacing: 16) {
@@ -21,11 +21,9 @@ struct LastResultSection: View {
                         MetricTile("Skor", value: score, unit: "/100", digits: 0)
                     }
                     MetricTile("Berat", value: result.weightGrams, unit: "g", digits: 0)
-                    MetricTile("Volume", value: result.volumeCm3, unit: "cm³", digits: 0)
-                    MetricTile("Blush", value: result.blushPercent, unit: "%", digits: 1)
                     MetricTile("Bintik", value: result.defectPercent, unit: "%", digits: 1)
                 }
-
+                
                 HStack(spacing: 12) {
                     if let grade = GradeDisplay(rawValue: result.grade) {
                         Text(grade.headline)
@@ -49,9 +47,8 @@ struct LastResultSection: View {
 }
 
 #Preview("Ada hasil") {
-    LastResultSection(result: .init(grade: "B", reason: "Bintik: 11.4% permukaan",
-                                    weightGrams: 372, volumeCm3: 318,
-                                    blushPercent: 9, defectPercent: 11.4,
+    LastResultSection(result: .init(id: UUID(), grade: "B", reason: "Bintik: 11.4% permukaan",
+                                    weightGrams: 372, defectPercent: 11.4,
                                     gradedAt: .now))
     .padding()
 }

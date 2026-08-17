@@ -9,37 +9,71 @@ import SwiftUI
 /// Data model untuk catatan hasil grading mangga (historis & real-time).
 struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
     let id: UUID
+    let recordCode: String
     let timestamp: Date
     let grade: GradeDisplay
     let weightGrams: Double
-    let volumeCm3: Double
-    let blushPercent: Double
     let defectPercent: Double
     let rejectionReason: String?
 
     init(
         id: UUID = UUID(),
+        recordCode: String = "",
         timestamp: Date = Date(),
         grade: GradeDisplay,
         weightGrams: Double,
-        volumeCm3: Double,
-        blushPercent: Double,
         defectPercent: Double,
         rejectionReason: String? = nil
     ) {
         self.id = id
+        self.recordCode = recordCode
         self.timestamp = timestamp
         self.grade = grade
         self.weightGrams = weightGrams
-        self.volumeCm3 = volumeCm3
-        self.blushPercent = blushPercent
         self.defectPercent = defectPercent
         self.rejectionReason = rejectionReason
     }
 
     var formattedCode: String {
-        let suffix = abs(id.uuidString.hashValue % 900) + 100
-        return "R48-\(suffix)"
+        guard !recordCode.isEmpty else {
+            let suffix = abs(id.uuidString.hashValue % 900) + 100
+            return "R48-\(suffix)"
+        }
+
+        return recordCode
+    }
+
+    func withRecordCode(_ code: String) -> MangoRecord {
+        MangoRecord(
+            id: id,
+            recordCode: code,
+            timestamp: timestamp,
+            grade: grade,
+            weightGrams: weightGrams,
+            defectPercent: defectPercent,
+            rejectionReason: rejectionReason
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case recordCode
+        case timestamp
+        case grade
+        case weightGrams
+        case defectPercent
+        case rejectionReason
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        recordCode = try container.decodeIfPresent(String.self, forKey: .recordCode) ?? ""
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        grade = try container.decode(GradeDisplay.self, forKey: .grade)
+        weightGrams = try container.decode(Double.self, forKey: .weightGrams)
+        defectPercent = try container.decode(Double.self, forKey: .defectPercent)
+        rejectionReason = try container.decodeIfPresent(String.self, forKey: .rejectionReason)
     }
 
     var weightStatus: String {
@@ -57,6 +91,7 @@ enum DummyDataStore {
 
     static func generateDummyRecords() -> [MangoRecord] {
         var records: [MangoRecord] = []
+        var dailySequences: [Date: Int] = [:]
         let calendar = Calendar.current
         
         // Define exact target date: August 13, 2026
@@ -84,48 +119,41 @@ enum DummyDataStore {
                 let roll = Int.random(in: 1...100)
                 let grade: GradeDisplay
                 let weight: Double
-                let volume: Double
-                let blush: Double
                 let defect: Double
                 let reason: String?
 
                 if roll <= 35 {
                     grade = .a
                     weight = Double.random(in: 410...550)
-                    volume = Double.random(in: 360...520)
-                    blush = Double.random(in: 16...38)
                     defect = Double.random(in: 0.5...4.5)
                     reason = nil
                 } else if roll <= 65 {
                     grade = .b
                     weight = Double.random(in: 355...400)
-                    volume = Double.random(in: 285...345)
-                    blush = Double.random(in: 6...14.5)
                     defect = Double.random(in: 5.5...14.5)
                     reason = "Bintik permukaan 8.5%"
                 } else if roll <= 90 {
                     grade = .c
                     weight = Double.random(in: 280...350)
-                    volume = Double.random(in: 210...279)
-                    blush = Double.random(in: 1...4.8)
                     defect = Double.random(in: 15.5...28.0)
                     reason = "Volume di bawah standar (240 cm³)"
                 } else {
                     grade = .reject
                     weight = Double.random(in: 180...270)
-                    volume = Double.random(in: 150...200)
-                    blush = Double.random(in: 0...0.8)
                     defect = Double.random(in: 31.0...45.0)
                     reason = "Bintik permukaan melebihi ambang (34.2%)"
                 }
 
+                let startOfDay = calendar.startOfDay(for: recordDate)
+                let sequence = dailySequences[startOfDay, default: 0] + 1
+                dailySequences[startOfDay] = sequence
+
                 records.append(
                     MangoRecord(
+                        recordCode: Self.recordCode(for: recordDate, sequence: sequence),
                         timestamp: recordDate,
                         grade: grade,
                         weightGrams: weight,
-                        volumeCm3: volume,
-                        blushPercent: blush,
                         defectPercent: defect,
                         rejectionReason: reason
                     )
@@ -134,5 +162,14 @@ enum DummyDataStore {
         }
         return records.sorted(by: { $0.timestamp > $1.timestamp })
     }
-}
 
+    private static func recordCode(for date: Date, sequence: Int) -> String {
+        let components = Calendar.current.dateComponents([.month, .day], from: date)
+        return String(
+            format: "M%d%d-%03d",
+            components.month ?? 0,
+            components.day ?? 0,
+            sequence
+        )
+    }
+}
