@@ -1,6 +1,6 @@
 # MangGO
 
-MangGO is an IoT-based grading assistant that combines an ESP32-powered hardware device with a native SwiftUI application for iPhone and iPad. The project aims to assist teachers in evaluating students more efficiently through sensor integration and a mobile interface.
+MangGO is an IoT-based grading assistant that combines an ESP32-powered hardware device with a native SwiftUI application for iPhone and iPad.
 
 ## Repository Structure
 
