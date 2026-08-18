@@ -1,11 +1,41 @@
-
 import SwiftUI
 
 struct RejectedMangoDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    
+    // Data record yang dipilih & list seluruh record
     @State var selectedRecord: MangoRecord
     let allRecords: [MangoRecord]
+    
+    // Subtitle dinamis ("Tren 7 Hari", "Tren 30 Hari", atau "Tren 3 Bulan")
     let contextTitle: String
+    
+    // State untuk Subtitle Header Dinamis, Sorting & Filter Tanggal
+    @State private var dynamicDateRangeText: String = ""
+    @State private var selectedSort: RecentSortOption = .newestTimestamp
+    @State private var dateFilterItems: [DateFilterItem] = []
+    @State private var showDateFilterPopover: Bool = false
+    
+    // Logika pengurutan & penyaringan daftar kode di sidebar kiri
+    var filteredAndSortedRecords: [MangoRecord] {
+        let activeFilters = dateFilterItems.filter { $0.isSelected }
+        
+        let dateFiltered = allRecords.filter { record in
+            if activeFilters.isEmpty { return true }
+            return activeFilters.contains { filter in
+                record.timestamp >= filter.startDate && record.timestamp <= filter.endDate
+            }
+        }
+        
+        switch selectedSort {
+        case .newestTimestamp: return dateFiltered.sorted { $0.timestamp > $1.timestamp }
+        case .oldestTimestamp: return dateFiltered.sorted { $0.timestamp < $1.timestamp }
+        case .heaviest: return dateFiltered.sorted { $0.weightGrams > $1.weightGrams }
+        case .lightest: return dateFiltered.sorted { $0.weightGrams < $1.weightGrams }
+        case .lowestDefect: return dateFiltered.sorted { $0.defectPercent < $1.defectPercent }
+        case .highestDefect: return dateFiltered.sorted { $0.defectPercent > $1.defectPercent }
+        }
+    }
     
     var body: some View {
         ZStack {
@@ -13,7 +43,7 @@ struct RejectedMangoDetailView: View {
                 .ignoresSafeArea()
             
             VStack(alignment: .leading, spacing: 20) {
-                // MARK: - Header Bar
+                // MARK: - Header Bar Dinamis
                 HStack(spacing: 16) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
@@ -29,45 +59,45 @@ struct RejectedMangoDetailView: View {
                         Text("Log Mangga Reject")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.black)
-                        Text("Tren 7 Hari")
+                        
+                        Text(dynamicDateRangeText.isEmpty ? contextTitle : "\(contextTitle) (\(dynamicDateRangeText))")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
                 }
                 
-                // MARK: - Action Filter Buttons
+                // MARK: - Action Filter Buttons (Desain Sesuai Screenshot)
                 HStack(spacing: 12) {
-                    Button(action: {}) {
-                        HStack(spacing: 8) {
-                            Text("Filter Tanggal")
-                                .font(.system(size: 14, weight: .medium))
-                            Image(systemName: "calendar")
-                                .font(.system(size: 14))
-                        }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                    // MARK: Button Filter Tanggal
+                    Button(action: { showDateFilterPopover.toggle() }) {
+                        SegmentedActionButton(
+                            title: "Filter Tanggal",
+                            iconName: "calendar"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showDateFilterPopover) {
+                        DateFilterPopoverView(items: $dateFilterItems)
+                            .presentationCompactAdaptation(.popover)
                     }
                     
-                    Button(action: {}) {
-                        HStack(spacing: 8) {
-                            Text("Urutkan")
-                                .font(.system(size: 14, weight: .medium))
-                            Image(systemName: "line.3.horizontal.decrease")
-                                .font(.system(size: 14))
+                    // MARK: Button Urutkan Menu
+                    Menu {
+                        Picker("Urutkan", selection: $selectedSort) {
+                            ForEach(RecentSortOption.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
                         }
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                    } label: {
+                        SegmentedActionButton(
+                            title: "Urutkan",
+                            iconName: "line.3.horizontal.decrease"
+                        )
                     }
                 }
+                .padding(.horizontal, 60)
+
                 
                 // MARK: - Main Content Split Area
                 HStack(alignment: .top, spacing: 20) {
@@ -82,7 +112,7 @@ struct RejectedMangoDetailView: View {
                         
                         ScrollView(.vertical, showsIndicators: false) {
                             VStack(spacing: 0) {
-                                ForEach(allRecords) { record in
+                                ForEach(filteredAndSortedRecords) { record in
                                     Button(action: { selectedRecord = record }) {
                                         Text(record.formattedCode)
                                             .font(.system(size: 14, weight: .bold))
@@ -104,6 +134,8 @@ struct RejectedMangoDetailView: View {
                     .background(Color.white)
                     .cornerRadius(18)
                     .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                    .padding(.horizontal, 20)
+
                     
                     // Right Detail Card
                     VStack(spacing: 24) {
@@ -175,6 +207,96 @@ struct RejectedMangoDetailView: View {
             .padding(.bottom, 24)
         }
         .navigationBarBackButtonHidden(true)
+        .onAppear {
+            setupDateFiltersAndRange()
+        }
+    }
+
+    
+    // MARK: - Setup Logic Sinkronisasi Tanggal
+    private func setupDateFiltersAndRange() {
+        guard !allRecords.isEmpty else { return }
+        
+        // 1. Dapatkan Min & Max Date Nyata dari List Data Record
+        guard let minDate = allRecords.map({ $0.timestamp }).min(),
+              let maxDate = allRecords.map({ $0.timestamp }).max() else { return }
+        
+        let headerFormatter = DateFormatter()
+        headerFormatter.dateFormat = "d MMM, yyyy"
+        self.dynamicDateRangeText = "\(headerFormatter.string(from: minDate)) - \(headerFormatter.string(from: maxDate))"
+        
+        // 2. Generate Opsi Dropdown Berdasarkan Periode dan Tanggal Nyata Data
+        let calendar = Calendar.current
+        var items: [DateFilterItem] = []
+        let labelFormatter = DateFormatter()
+        
+        if contextTitle.contains("7 Hari") {
+            for dayOffset in 0..<7 {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: minDate) {
+                    let startOfDay = calendar.startOfDay(for: date)
+                    let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: date) ?? date
+                    
+                    labelFormatter.dateFormat = "d MMM"
+                    let label = labelFormatter.string(from: date)
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: startOfDay,
+                        endDate: endOfDay
+                    ))
+                }
+            }
+        } else if contextTitle.contains("30 Hari") {
+            let segmentDays = 6
+            labelFormatter.dateFormat = "d MMM"
+            
+            for index in 0..<5 {
+                let startOffset = index * segmentDays
+                let endOffset = min(startOffset + (segmentDays - 1), 29)
+                
+                if let startDate = calendar.date(byAdding: .day, value: startOffset, to: minDate),
+                   let endDate = calendar.date(byAdding: .day, value: endOffset, to: minDate) {
+                    let start = calendar.startOfDay(for: startDate)
+                    let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+                    
+                    let label = "\(labelFormatter.string(from: startDate)) - \(labelFormatter.string(from: endDate))"
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: start,
+                        endDate: end
+                    ))
+                }
+            }
+        } else {
+            // Tren 3 Bulan
+            let segmentDays = 30
+            labelFormatter.dateFormat = "d MMM"
+            
+            for index in 0..<3 {
+                let startOffset = index * segmentDays
+                let endOffset = min(startOffset + (segmentDays - 1), 89)
+                
+                if let startDate = calendar.date(byAdding: .day, value: startOffset, to: minDate),
+                   let endDate = calendar.date(byAdding: .day, value: endOffset, to: minDate) {
+                    let start = calendar.startOfDay(for: startDate)
+                    let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+                    
+                    let label = "\(labelFormatter.string(from: startDate)) - \(labelFormatter.string(from: endDate))"
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: start,
+                        endDate: end
+                    ))
+                }
+            }
+        }
+        
+        self.dateFilterItems = items
     }
 }
 
@@ -190,7 +312,6 @@ struct MangoPhotoBox: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.gray)
             
-            // Image asset with color block fallback
             Image(imageName)
                 .resizable()
                 .scaledToFill()
@@ -253,15 +374,43 @@ struct RejectCauseCard: View {
     }
 }
 
-#Preview("Reject Detail", traits: .landscapeLeft) {
-    let records = DummyDataStore.generateDummyRecords()
+// MARK: - Previews (7 Hari, 30 Hari, & 3 Bulan)
+
+#Preview("Tren 7 Hari", traits: .landscapeLeft) {
+    let records = DummyDataStore.generateDummyRecords(days: 7)
     let rejectedRecords = records.filter { $0.grade == .reject }
     
     if let selectedRecord = rejectedRecords.first {
         RejectedMangoDetailView(
             selectedRecord: selectedRecord,
             allRecords: rejectedRecords,
-            contextTitle: "Data Harian"
+            contextTitle: TrendPeriod.days7.rawValue
+        )
+    }
+}
+
+#Preview("Tren 30 Hari", traits: .landscapeLeft) {
+    let records = DummyDataStore.generateDummyRecords(days: 30)
+    let rejectedRecords = records.filter { $0.grade == .reject }
+    
+    if let selectedRecord = rejectedRecords.first {
+        RejectedMangoDetailView(
+            selectedRecord: selectedRecord,
+            allRecords: rejectedRecords,
+            contextTitle: TrendPeriod.days30.rawValue
+        )
+    }
+}
+
+#Preview("Tren 3 Bulan", traits: .landscapeLeft) {
+    let records = DummyDataStore.generateDummyRecords(days: 90)
+    let rejectedRecords = records.filter { $0.grade == .reject }
+    
+    if let selectedRecord = rejectedRecords.first {
+        RejectedMangoDetailView(
+            selectedRecord: selectedRecord,
+            allRecords: rejectedRecords,
+            contextTitle: TrendPeriod.months3.rawValue
         )
     }
 }

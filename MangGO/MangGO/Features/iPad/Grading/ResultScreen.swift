@@ -34,4 +34,6 @@ struct ResultScreen: View {
 }
 
 #Preview("Grade A") { ResultScreen(grade: .a, reason: nil) }
+#Preview("Grade B") { ResultScreen(grade: .b, reason: nil) }
+#Preview("Grade C") { ResultScreen(grade: .c, reason: nil) }
 #Preview("Reject") { ResultScreen(grade: .reject, reason: "Bintik: 24.0% permukaan") }
