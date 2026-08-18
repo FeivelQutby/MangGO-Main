@@ -149,6 +149,16 @@ struct iPadView: View {
         )
 
         recordStore.add(record)
+
+        // Simpan foto dokumentasi kalau ada (hanya reject yang mengirimnya).
+        // Dikunci id yang sama dengan record supaya detail view bisa memuatnya.
+        if result.imageA != nil || result.imageB != nil {
+            MangoImageStore.shared.save(
+                id: result.id,
+                sideA: result.imageA,
+                sideB: result.imageB
+            )
+        }
     }
 }
 
