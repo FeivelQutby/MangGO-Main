@@ -1,41 +1,83 @@
 import SwiftUI
 
+// MARK: - Enum Period Option
+enum TrendPeriod: String, CaseIterable, Identifiable {
+    case days7 = "Tren 7 Hari"
+    case days30 = "Tren 30 Hari"
+    case months3 = "Tren 3 Bulan"
+    
+    var id: String { rawValue }
+    
+    var dayCount: Int {
+        switch self {
+        case .days7: return 7
+        case .days30: return 30
+        case .months3: return 90
+        }
+    }
+}
+
+// MARK: - Model Filter Tanggal
+struct DateFilterItem: Identifiable {
+    let id = UUID()
+    let label: String
+    var isSelected: Bool
+    let startDate: Date
+    let endDate: Date
+}
+
 struct RejectedMangoListView: View {
     @Environment(\.dismiss) private var dismiss
     
-    @State private var records: [MangoRecord] = DummyDataStore.generateDummyRecords(days: 7)
-        .filter { $0.grade == .reject }
+    // Parameter periode dari halaman tren
+    let period: TrendPeriod
     
-    // State untuk Multi-select Date Filter Overlay
-    @State private var isDateFilterPresented: Bool = false
-    @State private var availableDates: [String] = ["8 Apr", "9 Apr", "10 Apr", "11 Apr", "12 Apr", "13 Apr", "14 Apr"]
-    @State private var selectedDates: Set<String> = ["9 Apr", "10 Apr", "12 Apr", "14 Apr"]
+    // State data records & dynamic header date range
+    @State private var records: [MangoRecord] = []
+    @State private var dynamicDateRangeText: String = ""
     
-    // State untuk Sorting
+    // State untuk Sorting & Filter Tanggal
     @State private var selectedSort: RecentSortOption = .newestTimestamp
+    @State private var dateFilterItems: [DateFilterItem] = []
+    @State private var showDateFilterPopover: Bool = false
+    
+    // State Navigation Detail
     @State private var selectedRecordForDetail: MangoRecord? = nil
     @State private var navigateToDetail: Bool = false
     
+    init(period: TrendPeriod = .days7) {
+        self.period = period
+    }
+    
+    // MARK: - Filtering & Sorting Logic
     var filteredAndSortedRecords: [MangoRecord] {
-        let sorted = records
+        let activeFilters = dateFilterItems.filter { $0.isSelected }
+        
+        let dateFiltered = records.filter { record in
+            if activeFilters.isEmpty { return true }
+            return activeFilters.contains { filter in
+                record.timestamp >= filter.startDate && record.timestamp <= filter.endDate
+            }
+        }
+        
         switch selectedSort {
-        case .newestTimestamp: return sorted.sorted { $0.timestamp > $1.timestamp }
-        case .oldestTimestamp: return sorted.sorted { $0.timestamp < $1.timestamp }
-        case .heaviest: return sorted.sorted { $0.weightGrams > $1.weightGrams }
-        case .lightest: return sorted.sorted { $0.weightGrams < $1.weightGrams }
-        case .lowestDefect: return sorted.sorted { $0.defectPercent < $1.defectPercent }
-        case .highestDefect: return sorted.sorted { $0.defectPercent > $1.defectPercent }
+        case .newestTimestamp: return dateFiltered.sorted { $0.timestamp > $1.timestamp }
+        case .oldestTimestamp: return dateFiltered.sorted { $0.timestamp < $1.timestamp }
+        case .heaviest: return dateFiltered.sorted { $0.weightGrams > $1.weightGrams }
+        case .lightest: return dateFiltered.sorted { $0.weightGrams < $1.weightGrams }
+        case .lowestDefect: return dateFiltered.sorted { $0.defectPercent < $1.defectPercent }
+        case .highestDefect: return dateFiltered.sorted { $0.defectPercent > $1.defectPercent }
         }
     }
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .topLeading) {
                 Color(red: 247/255, green: 247/255, blue: 248/255)
                     .ignoresSafeArea()
                 
-                VStack(alignment: .leading, spacing: 20) {
-                    // MARK: - Header Bar
+                VStack(alignment: .leading, spacing: 24) {
+                    // MARK: - Header Bar Dinamis
                     HStack(spacing: 16) {
                         Button(action: { dismiss() }) {
                             Image(systemName: "chevron.left")
@@ -47,48 +89,38 @@ struct RejectedMangoListView: View {
                                 .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
                         }
                         
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Tren 7 Hari")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(period.rawValue)
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.black)
-                            Text("8 Apr, 2026 - 14 Apr, 2026")
+                            Text(dynamicDateRangeText.isEmpty ? "Memuat tanggal..." : dynamicDateRangeText)
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
-                        Spacer()
                     }
                     
-                    // MARK: - Filter & Sort Bar
-                    VStack(alignment: .leading, spacing: 14) {
+                    // MARK: - Title & Filter Bar
+                    VStack(alignment: .leading, spacing: 16) {
                         Text("Log Mangga Reject")
                             .font(.system(size: 22, weight: .bold))
                             .foregroundColor(.black)
+                            .padding(.horizontal, 60)
                         
                         HStack(spacing: 12) {
-                            // Filter Tanggal Button with Popover Dropdown
-                            Button(action: { isDateFilterPresented.toggle() }) {
-                                HStack(spacing: 8) {
-                                    Text("Filter Tanggal")
-                                        .font(.system(size: 14, weight: .medium))
-                                    Image(systemName: "calendar")
-                                        .font(.system(size: 14))
-                                }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            }
-                            .popover(isPresented: $isDateFilterPresented) {
-                                DateFilterOverlayView(
-                                    availableDates: availableDates,
-                                    selectedDates: $selectedDates
+                            // MARK: Button Filter Tanggal
+                            Button(action: { showDateFilterPopover.toggle() }) {
+                                SegmentedActionButton(
+                                    title: "Filter Tanggal",
+                                    iconName: "calendar"
                                 )
-                                .frame(width: 240, height: 320)
+                            }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $showDateFilterPopover) {
+                                DateFilterPopoverView(items: $dateFilterItems)
+                                    .presentationCompactAdaptation(.popover)
                             }
                             
-                            // Urutkan Button
+                            // MARK: Button Urutkan Menu
                             Menu {
                                 Picker("Urutkan", selection: $selectedSort) {
                                     ForEach(RecentSortOption.allCases) { option in
@@ -96,24 +128,18 @@ struct RejectedMangoListView: View {
                                     }
                                 }
                             } label: {
-                                HStack(spacing: 8) {
-                                    Text("Urutkan")
-                                        .font(.system(size: 14, weight: .medium))
-                                    Image(systemName: "line.3.horizontal.decrease")
-                                        .font(.system(size: 14))
-                                }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                                SegmentedActionButton(
+                                    title: "Urutkan",
+                                    iconName: "line.3.horizontal.decrease"
+                                )
                             }
                         }
+                        .padding(.horizontal, 60)
                     }
                     
                     // MARK: - Table Card
                     VStack(spacing: 0) {
+                        // Table Header
                         HStack {
                             Text("Kode Mangga").frame(maxWidth: .infinity, alignment: .center)
                             Text("Tanggal").frame(maxWidth: .infinity, alignment: .center)
@@ -128,6 +154,7 @@ struct RejectedMangoListView: View {
                         .padding(.horizontal, 16)
                         .background(Color(red: 85/255, green: 85/255, blue: 85/255))
                         
+                        // Table Rows
                         ScrollView(.vertical, showsIndicators: false) {
                             LazyVStack(spacing: 0) {
                                 ForEach(Array(filteredAndSortedRecords.enumerated()), id: \.element.id) { index, record in
@@ -175,19 +202,121 @@ struct RejectedMangoListView: View {
                     }
                     .cornerRadius(18)
                     .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 60)
                     
                     Spacer()
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 20)
+                .padding(.horizontal, 40)
+                .padding(.top, 24)
             }
             .navigationDestination(isPresented: $navigateToDetail) {
                 if let record = selectedRecordForDetail {
-                    RejectedMangoDetailView(selectedRecord: record, allRecords: records, contextTitle: "Tren 7 Hari")
+                    RejectedMangoDetailView(
+                        selectedRecord: record,
+                        allRecords: filteredAndSortedRecords,
+                        contextTitle: period.rawValue
+                    )
                 }
+            }
+            .onAppear {
+                setupDataAndFilters()
             }
         }
         .navigationViewStyle(.stack)
+    }
+    
+    // MARK: - Setup Data & Sinkronisasi Tanggal 100% Dynamic
+    private func setupDataAndFilters() {
+        let generatedRecords = DummyDataStore.generateDummyRecords(days: period.dayCount)
+        let rejected = generatedRecords.filter { $0.grade == .reject }
+        self.records = rejected
+        
+        guard let minDate = rejected.map({ $0.timestamp }).min(),
+              let maxDate = rejected.map({ $0.timestamp }).max() else { return }
+        
+        // 1. Format Teks Subtitle Header
+        let headerFormatter = DateFormatter()
+        headerFormatter.dateFormat = "d MMM, yyyy"
+        self.dynamicDateRangeText = "\(headerFormatter.string(from: minDate)) - \(headerFormatter.string(from: maxDate))"
+        
+        // 2. Format Generator Dropdown Tanggal
+        setupDateFilters(minDate: minDate, maxDate: maxDate)
+    }
+    
+    private func setupDateFilters(minDate: Date, maxDate: Date) {
+        let calendar = Calendar.current
+        var items: [DateFilterItem] = []
+        let labelFormatter = DateFormatter()
+        
+        switch period {
+        case .days7:
+            for dayOffset in 0..<7 {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: minDate) {
+                    let startOfDay = calendar.startOfDay(for: date)
+                    let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: date) ?? date
+                    
+                    labelFormatter.dateFormat = "d MMM"
+                    let label = labelFormatter.string(from: date)
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: startOfDay,
+                        endDate: endOfDay
+                    ))
+                }
+            }
+            
+        case .days30:
+            let segmentDays = 6
+            labelFormatter.dateFormat = "d MMM"
+            
+            for index in 0..<5 {
+                let startOffset = index * segmentDays
+                let endOffset = min(startOffset + (segmentDays - 1), 29)
+                
+                if let startDate = calendar.date(byAdding: .day, value: startOffset, to: minDate),
+                   let endDate = calendar.date(byAdding: .day, value: endOffset, to: minDate) {
+                    let start = calendar.startOfDay(for: startDate)
+                    let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+                    
+                    let label = "\(labelFormatter.string(from: startDate)) - \(labelFormatter.string(from: endDate))"
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: start,
+                        endDate: end
+                    ))
+                }
+            }
+            
+        case .months3:
+            let segmentDays = 30
+            labelFormatter.dateFormat = "d MMM"
+            
+            for index in 0..<3 {
+                let startOffset = index * segmentDays
+                let endOffset = min(startOffset + (segmentDays - 1), 89)
+                
+                if let startDate = calendar.date(byAdding: .day, value: startOffset, to: minDate),
+                   let endDate = calendar.date(byAdding: .day, value: endOffset, to: minDate) {
+                    let start = calendar.startOfDay(for: startDate)
+                    let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endDate) ?? endDate
+                    
+                    let label = "\(labelFormatter.string(from: startDate)) - \(labelFormatter.string(from: endDate))"
+                    
+                    items.append(DateFilterItem(
+                        label: label,
+                        isSelected: true,
+                        startDate: start,
+                        endDate: end
+                    ))
+                }
+            }
+        }
+        
+        self.dateFilterItems = items
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -203,49 +332,81 @@ struct RejectedMangoListView: View {
     }
 }
 
-// MARK: - Overlay Multiple Selection Date Filter Component
-struct DateFilterOverlayView: View {
-    let availableDates: [String]
-    @Binding var selectedDates: Set<String>
+// MARK: - Component Tombol Dua Warna (Sesuai Screenshot)
+struct SegmentedActionButton: View {
+    let title: String
+    let iconName: String
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(title)
+                .font(.system(size: 15, weight: .regular))
+                .foregroundColor(.black)
+                .padding(.leading, 16)
+                .padding(.trailing, 14)
+                .padding(.vertical, 10)
+                .background(Color.white)
+            
+            ZStack {
+                Color(red: 238/255, green: 238/255, blue: 239/255)
+                
+                Image(systemName: iconName)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(Color(red: 80/255, green: 80/255, blue: 80/255))
+            }
+            .frame(width: 44, height: 40)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Subview Popover Filter Tanggal
+struct DateFilterPopoverView: View {
+    @Binding var items: [DateFilterItem]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(availableDates, id: \.self) { dateStr in
-                        let isSelected = selectedDates.contains(dateStr)
-                        Button(action: {
-                            if isSelected {
-                                selectedDates.remove(dateStr)
-                            } else {
-                                selectedDates.insert(dateStr)
-                            }
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(isSelected ? .blue : .gray)
-                                
-                                Text(dateStr)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.black)
-                                
-                                Spacer()
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(isSelected ? Color.blue.opacity(0.12) : Color.clear)
-                            .cornerRadius(10)
-                        }
+            ForEach($items) { $item in
+                Button(action: { item.isSelected.toggle() }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: item.isSelected ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(item.isSelected ? .blue : .gray.opacity(0.5))
+                        
+                        Text(item.label)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(item.isSelected ? .blue : .black)
+                        
+                        Spacer()
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(item.isSelected ? Color.blue.opacity(0.1) : Color.clear)
+                    .cornerRadius(10)
                 }
-                .padding(10)
+                .buttonStyle(.plain)
             }
         }
+        .padding(12)
+        .frame(width: 260)
         .background(Color.white)
     }
 }
 
-#Preview(traits: .landscapeLeft) {
-    RejectedMangoListView()
+// MARK: - Previews
+#Preview("Tren 7 Hari", traits: .landscapeLeft) {
+    RejectedMangoListView(period: .days7)
+}
+
+#Preview("Tren 30 Hari", traits: .landscapeLeft) {
+    RejectedMangoListView(period: .days30)
+}
+
+#Preview("Tren 3 Bulan", traits: .landscapeLeft) {
+    RejectedMangoListView(period: .months3)
 }

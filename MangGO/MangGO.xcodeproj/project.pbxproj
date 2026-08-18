@@ -107,6 +107,9 @@
 			);
 			mainGroup = 8EE55C27302599A00055F24D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1B7BEDD4303317260062C097 /* XCRemoteSwiftPackageReference "lottie-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8EE55C31302599A00055F24D /* Products */;
 			projectDirPath = "";
@@ -374,6 +377,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1B7BEDD4303317260062C097 /* XCRemoteSwiftPackageReference "lottie-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.6.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 8EE55C28302599A00055F24D /* Project object */;
 }
