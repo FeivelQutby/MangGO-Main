@@ -1,15 +1,23 @@
 import SwiftUI
+import UIKit
 
 struct RejectedMangoDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    
+
     // Data record yang dipilih & list seluruh record
     @State var selectedRecord: MangoRecord
     let allRecords: [MangoRecord]
-    
+
     // Subtitle dinamis ("Tren 7 Hari", "Tren 30 Hari", atau "Tren 3 Bulan")
     let contextTitle: String
-    
+
+    // Foto mangga reject, dimuat dari disk lewat id record yang dipilih.
+    @State private var sideAImage: UIImage? = nil
+    @State private var sideBImage: UIImage? = nil
+
+    // Foto yang sedang dibuka fullscreen (nil = tidak ada).
+    @State private var fullscreenImage: UIImage? = nil
+
     // State untuk Subtitle Header Dinamis, Sorting & Filter Tanggal
     @State private var dynamicDateRangeText: String = ""
     @State private var selectedSort: RecentSortOption = .newestTimestamp
@@ -150,8 +158,12 @@ struct RejectedMangoDetailView: View {
                                 .foregroundColor(.black)
                             
                             HStack(spacing: 20) {
-                                MangoPhotoBox(title: "SISI A", imageName: "mango_side_a")
-                                MangoPhotoBox(title: "SISI B", imageName: "mango_side_b")
+                                MangoPhotoBox(title: "SISI A", image: sideAImage) {
+                                    fullscreenImage = sideAImage
+                                }
+                                MangoPhotoBox(title: "SISI B", image: sideBImage) {
+                                    fullscreenImage = sideBImage
+                                }
                             }
                         }
                         
@@ -205,11 +217,32 @@ struct RejectedMangoDetailView: View {
             .padding(.horizontal, 32)
             .padding(.top, 20)
             .padding(.bottom, 24)
+
+            // Overlay fullscreen saat foto dipencet: layar digelapkan + tombol X.
+            if let image = fullscreenImage {
+                FullscreenPhotoView(image: image) {
+                    fullscreenImage = nil
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: fullscreenImage != nil)
         .navigationBarBackButtonHidden(true)
         .onAppear {
             setupDateFiltersAndRange()
+            loadPhotos()
         }
+        .onChange(of: selectedRecord.id) { _, _ in
+            loadPhotos()
+        }
+    }
+
+    /// Muat ulang foto reject saat view muncul atau record yang dipilih berganti.
+    /// Record dummy / lama tanpa foto akan menghasilkan `nil` → placeholder.
+    private func loadPhotos() {
+        sideAImage = MangoImageStore.shared.image(id: selectedRecord.id, side: .a)
+        sideBImage = MangoImageStore.shared.image(id: selectedRecord.id, side: .b)
     }
 
     
@@ -304,22 +337,81 @@ struct RejectedMangoDetailView: View {
 
 struct MangoPhotoBox: View {
     let title: String
-    let imageName: String
-    
+    let image: UIImage?
+    var onTap: (() -> Void)? = nil
+
     var body: some View {
         VStack(spacing: 8) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.gray)
-            
-            Image(imageName)
+
+            Group {
+                if let image {
+                    // `scaledToFit` supaya seluruh foto kelihatan, tidak
+                    // terpotong seperti `scaledToFill`.
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    ZStack {
+                        Rectangle()
+                            .fill(Color.blue.opacity(0.12))
+                        VStack(spacing: 6) {
+                            Image(systemName: "photo.badge.exclamationmark")
+                                .font(.system(size: 26))
+                                .foregroundColor(.gray.opacity(0.6))
+                            Text("Foto tidak tersedia")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 220)
+            .background(Color(.systemGray6))
+            .cornerRadius(16)
+            .clipped()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if image != nil { onTap?() }
+            }
+        }
+    }
+}
+
+/// Foto mangga fullscreen dengan latar gelap dan tombol tutup (X) di kanan atas.
+struct FullscreenPhotoView: View {
+    let image: UIImage
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.92)
+                .ignoresSafeArea()
+                .onTapGesture { onClose() }
+
+            Image(uiImage: image)
                 .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .background(Color.blue.opacity(0.2))
-                .cornerRadius(16)
-                .clipped()
+                .scaledToFit()
+                .padding(24)
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Circle())
+                    }
+                }
+                Spacer()
+            }
+            .padding(24)
         }
     }
 }

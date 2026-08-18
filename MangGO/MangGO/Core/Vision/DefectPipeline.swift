@@ -53,6 +53,20 @@ actor DefectPipeline {
         )
     }
 
+    /// Foto dokumentasi satu sisi mangga sebagai JPEG. Pertama coba potong kotak
+    /// buah dari frame mentah (background apa adanya). Kalau buah tidak ketemu
+    /// (mis. mangga jauh/kecil di mangkuk pada sisi "bawah"), jatuh ke
+    /// `fallbackCrop` bila diberi — crop tetap ke area rig (mangkuk) — atau frame
+    /// penuh kalau tidak. Encoding dilakukan di dalam actor ini sehingga
+    /// `CGImage` tidak pernah menyeberang isolasi; yang keluar hanya `Data`.
+    func rejectPhoto(_ input: VisionInput, fallbackCrop: CGRect? = nil) async -> Data? {
+        if let crop = try? await isolator.isolate(input).rawCrop,
+           let data = MangoImageEncoder.jpeg(from: crop) {
+            return data
+        }
+        return MangoImageEncoder.jpeg(from: input, cropRect: fallbackCrop)
+    }
+
     /// Kotak ternormalisasi terhadap potongan → ternormalisasi terhadap frame
     /// penuh. Keduanya koordinat Vision (origin kiri-bawah), jadi hanya perlu
     /// penskalaan dan pergeseran, tanpa pembalikan sumbu.
