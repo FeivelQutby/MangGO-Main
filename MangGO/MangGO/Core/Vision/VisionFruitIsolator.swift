@@ -27,9 +27,15 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
         var regionOfInterest = CGRect(x: 0, y: 0, width: 1, height: 1)
 
         /// Luas siluet relatif frame yang dianggap masuk akal untuk satu buah.
-        var areaRatioRange: ClosedRange<Double> = 0.04...0.92
+        /// Batas bawah sedikit lebih longgar dari nilai awal (0.04 → 0.03) untuk
+        /// mangga yang agak jauh; TIDAK diturunkan lebih dari itu karena yang
+        /// bikin kabel/kardus di dasar box ikut kepilih bukan luasnya, tapi warna.
+        var areaRatioRange: ClosedRange<Double> = 0.03...0.95
 
         /// Fraksi minimum piksel yang harus berwarna seperti kulit mangga.
+        /// Dikembalikan ke 0.5 (dari 0.4): kabel jumper oranye/kuning + kardus
+        /// cokelat di dasar box "berwarna mangga" buat Vision, jadi ambang yang
+        /// terlalu longgar membuat gerombolan itu lolos & malah kepilih.
         var minFruitLikeness: Double = 0.5
 
         /// Margin di sekitar siluet sebelum dipotong, relatif sisi terpanjang.
@@ -46,6 +52,9 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
         /// Biru (dudukan, sekitar 200°) dan abu tak bersaturasi jatuh di luar.
         var fruitHueRanges: [ClosedRange<Double>] = [0...115, 330...360]
         var blushHueRanges: [ClosedRange<Double>] = [0...25, 335...360]
+        /// Dikembalikan ke 0.16 (dari 0.12): ambang saturasi yang terlalu rendah
+        /// membuat kardus/breadboard cokelat pudar ikut terhitung sebagai kulit
+        /// buah, sehingga gerombolan latar bisa menang jadi "buah".
         var minSaturation: Double = 0.16
         var minBlushSaturation: Double = 0.25
 
@@ -98,9 +107,11 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
 
         let cropRect = makeCropRect(around: chosen.bounds, imageWidth: source.width, imageHeight: source.height)
         let cropped = try crop(source, to: cropRect, mask: chosen.mask, fill: chosen.medianColor)
+        let rawCropped = try cropRaw(source, to: cropRect)
 
         return FruitIsolation(
             image: cropped,
+            rawCrop: rawCropped,
             cropRect: cropRect,
             areaRatio: chosen.areaRatio,
             color: chosen.colorProfile,
@@ -268,6 +279,28 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
         ).integral
 
         let cropped = blended.cropped(to: pixelRect)
+        guard let output = context.createCGImage(cropped, from: cropped.extent) else {
+            throw VisionError.unsupportedImage
+        }
+        return output
+    }
+
+    /// Potong `cropRect` yang sama tapi dari frame tegak **mentah**, tanpa
+    /// meratakan latar. Dipakai untuk foto dokumentasi mangga reject. `source`
+    /// sudah tegak dan `rect` koordinat Vision (origin kiri-bawah), sama seperti
+    /// `crop(_:to:mask:fill:)`, jadi hasilnya sejajar dengan `image`.
+    private func cropRaw(_ source: CGImage, to rect: CGRect) throws -> CGImage {
+        let image = CIImage(cgImage: source)
+        let extent = image.extent
+
+        let pixelRect = CGRect(
+            x: rect.minX * extent.width,
+            y: rect.minY * extent.height,
+            width: rect.width * extent.width,
+            height: rect.height * extent.height
+        ).integral
+
+        let cropped = image.cropped(to: pixelRect)
         guard let output = context.createCGImage(cropped, from: cropped.extent) else {
             throw VisionError.unsupportedImage
         }

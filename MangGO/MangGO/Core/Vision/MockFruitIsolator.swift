@@ -13,6 +13,7 @@ struct MockFruitIsolator: FruitIsolating {
     func isolate(_ input: VisionInput) async throws -> FruitIsolation {
         FruitIsolation(
             image: Self.placeholder,
+            rawCrop: Self.placeholder,
             cropRect: CGRect(x: 0, y: 0, width: 1, height: 1),
             areaRatio: areaRatio,
             color: color,

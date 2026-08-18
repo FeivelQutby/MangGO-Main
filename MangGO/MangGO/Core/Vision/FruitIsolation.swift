@@ -10,6 +10,12 @@ struct FruitIsolation: @unchecked Sendable {
     /// Potongan buah yang latarnya sudah diratakan. Ini yang masuk ke detektor.
     let image: CGImage
 
+    /// Potongan buah dari frame **mentah** (background tidak diratakan), dipotong
+    /// ke `cropRect` yang sama dengan `image`. Ini yang disimpan sebagai foto
+    /// dokumentasi mangga reject — operator ingin melihat buah apa adanya, bukan
+    /// versi yang latarnya sudah diganti warna kulit.
+    let rawCrop: CGImage
+
     /// Posisi `image` di dalam frame penuh, koordinat Vision ternormalisasi
     /// (origin kiri-bawah). Dipakai memetakan bounding box hasil deteksi
     /// kembali ke koordinat frame penuh.

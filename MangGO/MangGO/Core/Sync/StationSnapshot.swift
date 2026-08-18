@@ -74,6 +74,13 @@ struct StationSnapshot: Codable, Sendable, Equatable {
         var weightGrams: Double?
         var defectPercent: Double?
         var gradedAt: Date
+
+        /// Foto dokumentasi (JPEG) untuk mangga **reject** saja. Sisi A = capture
+        /// pertama, sisi B = capture kedua setelah flip. `nil` untuk grade lain
+        /// dan dibuang saat snapshot dibawa maju ke fase berikutnya supaya tidak
+        /// dikirim ulang berkali-kali di link lokal.
+        var imageA: Data?
+        var imageB: Data?
     }
     var phase: Phase = .idle
     var lastResult: Result?
