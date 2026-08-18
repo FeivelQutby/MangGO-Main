@@ -5,8 +5,17 @@ struct IdleScreenView: View {
     @State private var selectedTab: Int = 0
     @State private var showErrorPopup: Bool = false // State untuk mengontrol pop-up error
     
-    // Contoh data status sensor
-    private let sensorStates: [SensorState] = [.connected, .connected, .failed, .waiting]
+    @Environment(StationSync.self) private var sync
+        private var sensors: StationSnapshot.Sensors {
+            sync.snapshot.sensors
+        }
+    
+    private var hasSensorFailure: Bool {
+        sensors.loadCell == .offline ||
+        sensors.servo == .offline ||
+        sensors.camera == .offline ||
+        sensors.bluetooth == .offline
+    }
     
     var body: some View {
         ZStack {
@@ -15,10 +24,6 @@ struct IdleScreenView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 125) {
-                // Top Segmented Bar / Navigation Bar
-                topTabBar
-                    .padding(.top, 20)
-                
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 64) {
                         // Section 1: Status Sensor
@@ -62,8 +67,7 @@ struct IdleScreenView: View {
             }
         }
         .onAppear {
-            // Cek otomatis jika ada sensor yang gagal
-            if sensorStates.contains(.failed) {
+            if hasSensorFailure {
                 showErrorPopup = true
             }
         }
@@ -80,15 +84,15 @@ struct IdleScreenView: View {
                 SensorCardView(
                     icon: "scalemass",
                     title: "Load Cell",
-                    status: "Terhubung",
-                    state: sensorStates[0]
+                    status: sensorStatus(sensors.loadCell),
+                    state: sensorState(sensors.loadCell)
                 )
-
+            
                 SensorCardView(
                     icon: "gear",
                     title: "Servo",
-                    status: "Terhubung",
-                    state: sensorStates[1]
+                    status: sensorStatus(sensors.servo),
+                    state: sensorState(sensors.servo)
                 )
 
                 SensorCardView(
@@ -101,8 +105,8 @@ struct IdleScreenView: View {
                 SensorCardView(
                     icon: "sensor.tag.radiowaves.forward",
                     title: "Bluetooth",
-                    status: "Menunggu...",
-                    state: sensorStates[3]
+                    status: sensorStatus(sensors.bluetooth),
+                    state: sensorState(sensors.bluetooth)
                 )
             }
             .padding(20)

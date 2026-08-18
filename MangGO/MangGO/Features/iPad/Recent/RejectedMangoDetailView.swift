@@ -377,7 +377,7 @@ struct RejectCauseCard: View {
 // MARK: - Previews (7 Hari, 30 Hari, & 3 Bulan)
 
 #Preview("Tren 7 Hari", traits: .landscapeLeft) {
-    let records = DummyDataStore.generateDummyRecords(days: 7)
+    let records = DummyDataStore.generateDummyRecords()
     let rejectedRecords = records.filter { $0.grade == .reject }
     
     if let selectedRecord = rejectedRecords.first {
@@ -390,7 +390,7 @@ struct RejectCauseCard: View {
 }
 
 #Preview("Tren 30 Hari", traits: .landscapeLeft) {
-    let records = DummyDataStore.generateDummyRecords(days: 30)
+    let records = DummyDataStore.generateDummyRecords()
     let rejectedRecords = records.filter { $0.grade == .reject }
     
     if let selectedRecord = rejectedRecords.first {
@@ -403,7 +403,7 @@ struct RejectCauseCard: View {
 }
 
 #Preview("Tren 3 Bulan", traits: .landscapeLeft) {
-    let records = DummyDataStore.generateDummyRecords(days: 90)
+    let records = DummyDataStore.generateDummyRecords()
     let rejectedRecords = records.filter { $0.grade == .reject }
     
     if let selectedRecord = rejectedRecords.first {

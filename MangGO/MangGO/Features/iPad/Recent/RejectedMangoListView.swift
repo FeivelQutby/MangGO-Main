@@ -35,7 +35,7 @@ struct DateFilterItem: Identifiable {
 
 struct RejectedMangoListView: View {
 
-    let rejectedRecords: [MangoRecord]
+    private let rejectedRecords: [MangoRecord]?
 
     @Environment(\.dismiss) private var dismiss
     
@@ -56,6 +56,12 @@ struct RejectedMangoListView: View {
     @State private var navigateToDetail: Bool = false
     
     init(period: TrendPeriod = .days7) {
+        self.period = period
+        self.rejectedRecords = nil
+    }
+    
+    init(rejectedRecords: [MangoRecord], period: TrendPeriod = .days7) {
+        self.rejectedRecords = rejectedRecords
         self.period = period
     }
     
@@ -237,12 +243,15 @@ struct RejectedMangoListView: View {
     
     // MARK: - Setup Data & Sinkronisasi Tanggal 100% Dynamic
     private func setupDataAndFilters() {
-        let generatedRecords = DummyDataStore.generateDummyRecords(days: period.dayCount)
-        let rejected = generatedRecords.filter { $0.grade == .reject }
+        let rejected = rejectedRecords ?? DummyDataStore.generateDummyRecords(days: period.dayCount).filter { $0.grade == .reject }
         self.records = rejected
         
         guard let minDate = rejected.map({ $0.timestamp }).min(),
-              let maxDate = rejected.map({ $0.timestamp }).max() else { return }
+              let maxDate = rejected.map({ $0.timestamp }).max() else {
+            self.dynamicDateRangeText = "Tidak ada data"
+            self.dateFilterItems = []
+            return
+        }
         
         // 1. Format Teks Subtitle Header
         let headerFormatter = DateFormatter()
@@ -402,13 +411,6 @@ struct DateFilterPopoverView: View {
                 .buttonStyle(.plain)
             }
             .background(Color(red: 242/255, green: 242/255, blue: 247/255))
-        }
-        .sheet(item: $selectedRecordForDetail) { record in
-            RejectedMangoDetailView(
-                selectedRecord: record,
-                allRecords: rejectedRecords,
-                contextTitle: "Data Harian"
-            )
         }
         .padding(12)
         .frame(width: 260)

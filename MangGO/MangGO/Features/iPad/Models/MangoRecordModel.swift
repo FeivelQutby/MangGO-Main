@@ -9,71 +9,71 @@ import SwiftUI
 /// Data model untuk catatan hasil grading mangga (historis & real-time).
 struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
     let id: UUID
-    let recordCode: String
     let timestamp: Date
     let grade: GradeDisplay
     let weightGrams: Double
     let defectPercent: Double
     let rejectionReason: String?
+    let recordCode: String
 
     init(
         id: UUID = UUID(),
-        recordCode: String = "",
         timestamp: Date = Date(),
         grade: GradeDisplay,
         weightGrams: Double,
         defectPercent: Double,
-        rejectionReason: String? = nil
+        rejectionReason: String? = nil,
+        recordCode: String = ""
     ) {
         self.id = id
-        self.recordCode = recordCode
         self.timestamp = timestamp
         self.grade = grade
         self.weightGrams = weightGrams
         self.defectPercent = defectPercent
         self.rejectionReason = rejectionReason
+        self.recordCode = recordCode
     }
-
-    var formattedCode: String {
-        guard !recordCode.isEmpty else {
-            let suffix = abs(id.uuidString.hashValue % 900) + 100
-            return "R48-\(suffix)"
-        }
-
-        return recordCode
-    }
-
-    func withRecordCode(_ code: String) -> MangoRecord {
-        MangoRecord(
-            id: id,
-            recordCode: code,
-            timestamp: timestamp,
-            grade: grade,
-            weightGrams: weightGrams,
-            defectPercent: defectPercent,
-            rejectionReason: rejectionReason
-        )
-    }
-
+    
     enum CodingKeys: String, CodingKey {
         case id
-        case recordCode
         case timestamp
         case grade
         case weightGrams
         case defectPercent
         case rejectionReason
+        case recordCode
     }
-
+    
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        recordCode = try container.decodeIfPresent(String.self, forKey: .recordCode) ?? ""
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         grade = try container.decode(GradeDisplay.self, forKey: .grade)
         weightGrams = try container.decode(Double.self, forKey: .weightGrams)
         defectPercent = try container.decode(Double.self, forKey: .defectPercent)
         rejectionReason = try container.decodeIfPresent(String.self, forKey: .rejectionReason)
+        recordCode = try container.decodeIfPresent(String.self, forKey: .recordCode) ?? ""
+    }
+    
+    func withRecordCode(_ recordCode: String) -> MangoRecord {
+        MangoRecord(
+            id: id,
+            timestamp: timestamp,
+            grade: grade,
+            weightGrams: weightGrams,
+            defectPercent: defectPercent,
+            rejectionReason: rejectionReason,
+            recordCode: recordCode
+        )
+    }
+
+    var formattedCode: String {
+        if !recordCode.isEmpty {
+            return recordCode
+        }
+        
+        let suffix = abs(id.uuidString.hashValue % 900) + 100
+        return "R48-\(suffix)"
     }
 
     var weightStatus: String {
@@ -89,31 +89,24 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
 @MainActor
 enum DummyDataStore {
 
-    static func generateDummyRecords() -> [MangoRecord] {
+    static func generateDummyRecords(days: Int = 30) -> [MangoRecord] {
         var records: [MangoRecord] = []
-        var dailySequences: [Date: Int] = [:]
         let calendar = Calendar.current
-        
-        // Define exact target date: August 13, 2026
-        var components = DateComponents()
-        components.year = 2026
-        components.month = 8
-        components.day = 13
-        guard let anchorDate = calendar.date(from: components) else { return [] }
+        let now = Date()
 
-        // Generate data for the past 150 days to cover full 3 previous months
-        for dayOffset in 0..<150 {
-            guard let targetDate = calendar.date(byAdding: .day, value: -dayOffset, to: anchorDate) else { continue }
+        for dayOffset in 0..<days {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
             
-            let countForDay = Int.random(in: 10...30)
+            // Variasi jumlah mangga per hari (60 s/d 140 mangga per hari)
+            let countForDay = Int.random(in: 60...140)
             
             for _ in 0..<countForDay {
                 let minute = Int.random(in: 0...59)
                 let hour = Int.random(in: 8...17)
-                var recordComponents = calendar.dateComponents([.year, .month, .day], from: targetDate)
-                recordComponents.hour = hour
-                recordComponents.minute = minute
-                guard let recordDate = calendar.date(from: recordComponents) else { continue }
+                var components = calendar.dateComponents([.year, .month, .day], from: date)
+                components.hour = hour
+                components.minute = minute
+                guard let recordDate = calendar.date(from: components) else { continue }
 
                 // Distribusi Grade: A (35%), B (30%), C (25%), Reject (10%)
                 let roll = Int.random(in: 1...100)
@@ -144,13 +137,8 @@ enum DummyDataStore {
                     reason = "Bintik permukaan melebihi ambang (34.2%)"
                 }
 
-                let startOfDay = calendar.startOfDay(for: recordDate)
-                let sequence = dailySequences[startOfDay, default: 0] + 1
-                dailySequences[startOfDay] = sequence
-
                 records.append(
                     MangoRecord(
-                        recordCode: Self.recordCode(for: recordDate, sequence: sequence),
                         timestamp: recordDate,
                         grade: grade,
                         weightGrams: weight,
@@ -161,15 +149,5 @@ enum DummyDataStore {
             }
         }
         return records.sorted(by: { $0.timestamp > $1.timestamp })
-    }
-
-    private static func recordCode(for date: Date, sequence: Int) -> String {
-        let components = Calendar.current.dateComponents([.month, .day], from: date)
-        return String(
-            format: "M%d%d-%03d",
-            components.month ?? 0,
-            components.day ?? 0,
-            sequence
-        )
     }
 }
