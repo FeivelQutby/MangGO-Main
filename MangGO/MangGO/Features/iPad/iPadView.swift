@@ -25,6 +25,10 @@ struct iPadView: View {
     @State private var dummyRecords: [MangoRecord] = DummyDataStore.generateDummyRecords()
     // REAL DATA (Pilih salah satu)
     @State private var recordStore = MangoRecordStore()
+    
+    private var realRecords: [MangoRecord] {
+        recordStore.records
+    }
 
     private var snapshot: StationSnapshot { sync.snapshot }
 
@@ -101,37 +105,29 @@ struct iPadView: View {
             
 //      REAL DATA (Pilih salah satu)
         case .dataHarian:
-            if records.isEmpty {
+            if realRecords.isEmpty {
                 EmptyStateView(
                     title: "Belum Ada Data Harian Grading",
                     subtitle: "Mulai batch baru untuk melihat data harian grading",
                     icon: "shippingbox"
                 )
             } else {
-                RecentScreen(records: records)
+                RecentScreen(records: realRecords)
             }
 
+        case .tren:
+            HistoryScreen(allRecords: dummyRecords)
+            
 //        case .tren:
-//            if dummyRecords.isEmpty {
+//            if records.isEmpty {
 //                EmptyStateView(
 //                    title: "Belum Ada Data Tren Grading",
 //                    subtitle: "Mulai batch baru untuk melihat data tren grading",
 //                    icon: "shippingbox"
 //                )
 //            } else {
-//                HistoryScreen(allRecords: dummyRecords)
+//                HistoryScreen(allRecords: records)
 //            }
-            
-        case .tren:
-            if records.isEmpty {
-                EmptyStateView(
-                    title: "Belum Ada Data Tren Grading",
-                    subtitle: "Mulai batch baru untuk melihat data tren grading",
-                    icon: "shippingbox"
-                )
-            } else {
-                HistoryScreen(allRecords: records)
-            }
         }
     }
     
