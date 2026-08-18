@@ -393,47 +393,36 @@ final class CaptureViewModel {
         switch event {
             
         case .loadCellReady:
-            
             loadCellReady = true
-            
             print("⚖️ Load Cell READY")
-            
             publish(.idle)
             
+        case .loadCellOffline:
+            loadCellReady = false
+            print("❌ Load Cell OFFLINE")
+            publish(.idle)
             
         case .servoReady:
-            
             servoReady = true
-            
             print("⚙️ Servo READY")
-            
             publish(.idle)
             
         case .measurementStarted:
-            
             photo1Captured = false
             photo2Captured = false
             measurementReceived = false
-            
             photo1 = nil
             photo2 = nil
-            
             measurementPhase = .capturingPhoto1
             phase = .ready
-            
             print("🚀 Measurement started")
             
-            
         case .capture1:
-            
             measurementPhase = .capturingPhoto1
-            
             print("📸 Capture 1 requested")
-            
             Task {
                 await capturePhoto1()
             }
-            
             
         case .capture2:
             
