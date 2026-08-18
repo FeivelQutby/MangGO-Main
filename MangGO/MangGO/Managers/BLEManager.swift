@@ -17,6 +17,8 @@ enum BLEEvent {
     case loadCellReady
     case loadCellOffline
     case servoReady
+    case servoOffline
+    case hardwareReady
     case measurementStarted
     case capture1
     case capture2
@@ -123,6 +125,12 @@ final class BLEManager: NSObject, ObservableObject {
             
         case "SERVO_READY":
             lastEvent = .servoReady
+            
+        case "SERVO_OFFLINE":
+            lastEvent = .servoOffline
+            
+        case "HARDWARE_READY":
+            lastEvent = .hardwareReady
             
         case "MEASUREMENT_STARTED":
             lastEvent = .measurementStarted
@@ -373,6 +381,29 @@ extension BLEManager: CBPeripheralDelegate {
                     for: characteristic
                 )
             }
+        }
+    }
+    
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateNotificationStateFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+
+        if let error {
+            print("Notification setup error:", error)
+            return
+        }
+
+        guard characteristic.uuid == eventUUID else {
+            return
+        }
+
+        if characteristic.isNotifying {
+
+            print("🔔 Event notifications ENABLED")
+
+            sendCommand("REQUEST_HARDWARE_STATUS")
         }
     }
     

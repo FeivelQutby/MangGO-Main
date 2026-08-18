@@ -84,9 +84,25 @@ final class StationSync: NSObject {
     /// No-op kalau iPad tidak tersambung — siklus grading tidak boleh menunggu.
     func publish(_ new: StationSnapshot) {
         snapshot = new
-        guard role == .station, !session.connectedPeers.isEmpty,
-              let data = try? JSONEncoder().encode(new) else { return }
-        try? session.send(data, toPeers: session.connectedPeers, with: .reliable)
+
+        print("""
+        📡 PUBLISH SENSOR STATUS
+        Load Cell: \(new.sensors.loadCell)
+        Servo: \(new.sensors.servo)
+        Camera: \(new.sensors.camera)
+        Bluetooth: \(new.sensors.bluetooth)
+        """)
+
+        guard role == .station,
+              !session.connectedPeers.isEmpty,
+              let data = try? JSONEncoder().encode(new)
+        else { return }
+
+        try? session.send(
+            data,
+            toPeers: session.connectedPeers,
+            with: .reliable
+        )
     }
 
     fileprivate func receive(_ incoming: StationSnapshot) {
@@ -104,6 +120,31 @@ final class StationSync: NSObject {
 
     fileprivate func setError(_ message: String) {
         lastError = message
+    }
+    
+    func updateSensorStatus(
+        loadCell: StationSnapshot.Sensors.State? = nil,
+        servo: StationSnapshot.Sensors.State? = nil,
+        camera: StationSnapshot.Sensors.State? = nil,
+        bluetooth: StationSnapshot.Sensors.State? = nil
+    ) {
+        if let loadCell {
+            snapshot.sensors.loadCell = loadCell
+        }
+
+        if let servo {
+            snapshot.sensors.servo = servo
+        }
+
+        if let camera {
+            snapshot.sensors.camera = camera
+        }
+
+        if let bluetooth {
+            snapshot.sensors.bluetooth = bluetooth
+        }
+
+        snapshot.updatedAt = .now
     }
 }
 

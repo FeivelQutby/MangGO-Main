@@ -1,15 +1,16 @@
 import SwiftUI
 
 struct IdleScreenView: View {
+
     let snapshot: StationSnapshot
+
     @State private var selectedTab: Int = 0
-    @State private var showErrorPopup: Bool = false // State untuk mengontrol pop-up error
-    
-    @Environment(StationSync.self) private var sync
-        private var sensors: StationSnapshot.Sensors {
-            sync.snapshot.sensors
-        }
-    
+    @State private var showErrorPopup: Bool = false
+
+    private var sensors: StationSnapshot.Sensors {
+        snapshot.sensors
+    }
+
     private var hasSensorFailure: Bool {
         sensors.loadCell == .offline ||
         sensors.servo == .offline ||
@@ -67,8 +68,11 @@ struct IdleScreenView: View {
             }
         }
         .onAppear {
-            if hasSensorFailure {
-                showErrorPopup = true
+            showErrorPopup = hasSensorFailure
+        }
+        .onChange(of: hasSensorFailure) { _, failed in
+            withAnimation {
+                showErrorPopup = failed
             }
         }
     }
@@ -277,22 +281,6 @@ enum SensorState {
         case .connected: return "checkmark.circle"
         case .failed: return "xmark.circle"
         case .waiting: return "arrow.clockwise"
-        }
-    }
-    
-    private func sensorState(
-        _ state: StationSnapshot.Sensors.State
-    ) -> SensorState {
-
-        switch state {
-        case .ready:
-            return .connected
-
-        case .waiting:
-            return .waiting
-
-        case .offline:
-            return .failed
         }
     }
 }

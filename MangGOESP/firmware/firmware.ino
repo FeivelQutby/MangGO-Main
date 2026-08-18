@@ -168,6 +168,14 @@ void sendHardwareStatus() {
             "SERVO_OFFLINE"
         );
     }
+
+
+    if (loadCellReady && servoReady) {
+
+        sendEvent(
+            "HARDWARE_READY"
+        );
+    }
 }
 
 // =====================================================
@@ -408,6 +416,12 @@ class CommandCallbacks
                         COMPLETE;
                 }
             }
+            else if (command == "REQUEST_HARDWARE_STATUS") {
+                Serial.println(
+                    "Hardware status requested by iPhone"
+                );
+                sendHardwareStatus();
+            }
         }
     };
 
@@ -448,7 +462,6 @@ class ServerCallbacks
             Serial.println();
 
             if (loadCellReady) {
-
                 Serial.println(
                     "⚖️ HX711: READY"
                 );
@@ -479,24 +492,21 @@ class ServerCallbacks
 
             sendHardwareStatus();
         }
+    void onDisconnect(
+        NimBLEServer * server,
+        NimBLEConnInfo & connInfo,
+        int reason
+    ) override {
 
-        void onDisconnect(
-            NimBLEServer * server,
-            NimBLEConnInfo & connInfo,
-            int reason
-        ) override {
+        deviceConnected = false;
 
-            deviceConnected = false;
+        Serial.println(
+            "📱 iPhone disconnected!"
+        );
 
-            Serial.println(
-                "📱 iPhone disconnected!"
-            );
-
-            NimBLEDevice::
-                getAdvertising() -
-                > start();
-        }
-    };
+        NimBLEDevice::getAdvertising()->start();
+    }
+};
 
 // =====================================================
 // SETUP

@@ -407,6 +407,21 @@ final class CaptureViewModel {
             print("⚙️ Servo READY")
             publish(.idle)
             
+        case .servoOffline:
+            servoReady = false
+            print("❌ Servo OFFLINE")
+            publish(.idle)
+            
+        case .hardwareReady:
+            loadCellReady = true
+            servoReady = true
+
+            print("✅ Hardware READY")
+            print("⚖️ Load Cell READY")
+            print("⚙️ Servo READY")
+
+            publish(.idle)
+            
         case .measurementStarted:
             photo1Captured = false
             photo2Captured = false

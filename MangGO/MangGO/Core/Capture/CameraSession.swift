@@ -36,7 +36,7 @@ final class CameraSession: NSObject, @unchecked Sendable {
         var preferredLongSide = 1920
 
         /// Skala tampilan seperti di app Kamera: `0.5` = ultra-wide, `1` = wide.
-        var displayZoom: CGFloat = 0.5
+        var displayZoom: CGFloat = 1
 
         /// Koreksi distorsi barrel. Wajib kalau frame ini juga dipakai mengukur
         /// dimensi: tanpa ini, buah yang sama terbaca lebih besar di tepi frame
