@@ -792,17 +792,17 @@ void loop() {
         );
 
         Serial.println(
-            "Waiting 3 seconds..."
+            "Waiting 1 seconds..."
         );
 
-        delay(3000);
+        delay(1000);
 
         // Return to start
 
         moveServo(
             1500,
             500,
-            2000
+            300
         );
 
         Serial.println(
