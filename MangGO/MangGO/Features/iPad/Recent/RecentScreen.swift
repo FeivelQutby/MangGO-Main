@@ -198,8 +198,11 @@ struct RecentScreen: View {
         }
         .background(Color(red: 242/255, green: 242/255, blue: 247/255))
         .fullScreenCover(isPresented: $showingRejectedList) {
+            // Data Harian sudah dipersempit ke satu tanggal, jadi tidak ada
+            // `dateContext` — filter tanggal per kelompok hanya relevan di Tren.
             RejectedMangoListView(
-                rejectedRecords: todayRecords.filter { $0.grade == .reject }
+                rejectedRecords: todayRecords.filter { $0.grade == .reject },
+                contextTitle: "Data Harian"
             )
         }
     }

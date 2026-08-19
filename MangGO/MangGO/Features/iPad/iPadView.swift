@@ -21,6 +21,13 @@ struct iPadView: View {
     @Environment(StationSync.self) private var sync
     @State private var tab: Tab = .grading
 
+    /// Hasil terakhir yang sudah ditutup operator (atau ditutup sendiri oleh
+    /// timer di `ResultScreen`). Snapshot dari iPhone tetap bertahan di fase
+    /// `.done` sampai buah berikutnya masuk, jadi tanpa penanda ini overlay akan
+    /// langsung muncul lagi begitu ditutup. Dikunci ke id hasil supaya buah
+    /// berikutnya — yang id-nya berbeda — tetap memunculkan layar hasilnya.
+    @State private var dismissedResultID: UUID?
+
     // DUMMY DATA
     @State private var dummyRecords: [MangoRecord] = DummyDataStore.generateDummyRecords()
     // REAL DATA (Pilih salah satu)
@@ -34,6 +41,18 @@ struct iPadView: View {
 
     private var finishedGrade: GradeDisplay? {
         sync.isLinked ? snapshot.completedGrade : nil
+    }
+
+    /// Hasil yang layar penuhnya masih layak ditampilkan: sudah selesai, belum
+    /// ditutup, dan tab Grading sedang aktif.
+    private var activeResult: StationSnapshot.Result? {
+        guard tab == .grading,
+              finishedGrade != nil,
+              let result = snapshot.lastResult,
+              result.id != dismissedResultID
+        else { return nil }
+
+        return result
     }
 
     private var todayRecords: [MangoRecord] {
@@ -71,10 +90,18 @@ struct iPadView: View {
             }
 
             // Layar hasil hanya menutupi tab Grading.
-            if tab == .grading, let grade = finishedGrade,
-               let result = snapshot.lastResult {
-                ResultScreen(grade: grade, reason: result.reason)
-                    .transition(.opacity)
+            if let result = activeResult, let grade = finishedGrade {
+                ResultScreen(grade: grade, reason: result.reason) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        dismissedResultID = result.id
+                    }
+                }
+                // Tanpa `.id` SwiftUI memakai ulang view yang sama untuk buah
+                // berikutnya: `.task` tidak dijalankan ulang, sehingga suara
+                // tidak berbunyi lagi dan timer 5 detik tidak dimulai ulang.
+                .id(result.id)
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: snapshot.phase)
@@ -145,19 +172,23 @@ struct iPadView: View {
             grade: grade,
             weightGrams: result.weightGrams ?? 0,
             defectPercent: result.defectPercent ?? 0,
-            rejectionReason: result.reason
+            rejectionReason: result.reason,
+            color: result.color
         )
 
         recordStore.add(record)
 
         // Simpan foto dokumentasi kalau ada (hanya reject yang mengirimnya).
-        // Dikunci id yang sama dengan record supaya detail view bisa memuatnya.
+        // Dikunci id yang sama dengan record supaya `RejectedMangoDetailView`
+        // bisa memuatnya kembali lewat `MangoImageStore`.
         if result.imageA != nil || result.imageB != nil {
             MangoImageStore.shared.save(
                 id: result.id,
                 sideA: result.imageA,
                 sideB: result.imageB
             )
+        } else if grade == .reject {
+            print("⚠️ Hasil reject \(result.id) datang tanpa foto sisi mana pun")
         }
     }
 }

@@ -45,9 +45,24 @@ actor DefectPipeline {
             kept.append(mapped)
         }
 
+        // Luas bintik diukur dengan menghitung piksel siluet yang tertutup kotak
+        // deteksi, bukan dengan menjumlahkan luas kotaknya.
+        //
+        // Penjumlahan luas kotak salah dua kali: kotak yang bertumpuk dihitung
+        // berulang, dan bagian kotak yang menjulur ke latar ikut terhitung
+        // sebagai bintik di kulit buah. `minMaskOverlap` di atas cuma memutuskan
+        // sebuah kotak dibuang atau tidak — begitu lolos, dulu seluruh luasnya
+        // masuk. Gabungan keduanya bisa melaporkan luas bintik beberapa kali
+        // lipat dari luas fisiknya, yang lalu menabrak ambang diskualifikasi 30%
+        // di `GradingEngine` dan menolak buah yang sebenarnya bagus.
+        let defectPixels = isolation.silhouette.filledPixelCount(
+            coveredByAnyOf: kept.map(\.boundingBox)
+        )
+
         return DefectAnalysis(
             defects: kept,
             fruitAreaRatio: isolation.areaRatio,
+            defectAreaRatio: Double(defectPixels) / Double(isolation.silhouette.pixelCount),
             color: isolation.color,
             rejectedDetections: rejected
         )

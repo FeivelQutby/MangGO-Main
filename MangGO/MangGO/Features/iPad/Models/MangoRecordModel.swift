@@ -16,6 +16,13 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
     let rejectionReason: String?
     let recordCode: String
 
+    /// HSV median kulit buah + cakupan blush, diteruskan dari iPhone lewat
+    /// `StationSnapshot.Result`.
+    ///
+    /// `nil` untuk record yang tersimpan sebelum warna ikut dikirim. Layar
+    /// detail menampilkannya sebagai "belum tersedia", bukan menebak nilainya.
+    let color: ColorProfile?
+
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
@@ -23,7 +30,8 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
         weightGrams: Double,
         defectPercent: Double,
         rejectionReason: String? = nil,
-        recordCode: String = ""
+        recordCode: String = "",
+        color: ColorProfile? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -32,8 +40,9 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
         self.defectPercent = defectPercent
         self.rejectionReason = rejectionReason
         self.recordCode = recordCode
+        self.color = color
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case timestamp
@@ -42,8 +51,9 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
         case defectPercent
         case rejectionReason
         case recordCode
+        case color
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -53,8 +63,12 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
         defectPercent = try container.decode(Double.self, forKey: .defectPercent)
         rejectionReason = try container.decodeIfPresent(String.self, forKey: .rejectionReason)
         recordCode = try container.decodeIfPresent(String.self, forKey: .recordCode) ?? ""
+        // `decodeIfPresent`: record yang sudah ada di UserDefaults sebelum kolom
+        // ini lahir harus tetap bisa dimuat — kalau tidak, satu record lama
+        // menggagalkan decode seluruh riwayat grading.
+        color = try container.decodeIfPresent(ColorProfile.self, forKey: .color)
     }
-    
+
     func withRecordCode(_ recordCode: String) -> MangoRecord {
         MangoRecord(
             id: id,
@@ -63,7 +77,8 @@ struct MangoRecord: Identifiable, Sendable, Codable, Equatable {
             weightGrams: weightGrams,
             defectPercent: defectPercent,
             rejectionReason: rejectionReason,
-            recordCode: recordCode
+            recordCode: recordCode,
+            color: color
         )
     }
 
@@ -115,26 +130,36 @@ enum DummyDataStore {
                 let defect: Double
                 let reason: String?
 
+                // Hue memakai skala OpenCV (0...179) yang sama dengan
+                // `ColorProfile` sungguhan, jadi kartu warna di layar detail
+                // menampilkan nama dan badge yang masuk akal juga saat memakai
+                // data dummy.
+                let hue: Double
+
                 if roll <= 35 {
                     grade = .a
                     weight = Double.random(in: 410...550)
                     defect = Double.random(in: 0.5...4.5)
                     reason = nil
+                    hue = Double.random(in: 18...31)      // matang
                 } else if roll <= 65 {
                     grade = .b
                     weight = Double.random(in: 355...400)
                     defect = Double.random(in: 5.5...14.5)
                     reason = "Bintik permukaan 8.5%"
+                    hue = Double.random(in: 34...42)      // cukup matang
                 } else if roll <= 90 {
                     grade = .c
                     weight = Double.random(in: 280...350)
                     defect = Double.random(in: 15.5...28.0)
                     reason = "Volume di bawah standar (240 cm³)"
+                    hue = Double.random(in: 44...54)      // muda
                 } else {
                     grade = .reject
                     weight = Double.random(in: 180...270)
                     defect = Double.random(in: 31.0...45.0)
                     reason = "Bintik permukaan melebihi ambang (34.2%)"
+                    hue = Double.random(in: 5...13)       // terlalu matang
                 }
 
                 records.append(
@@ -143,7 +168,13 @@ enum DummyDataStore {
                         grade: grade,
                         weightGrams: weight,
                         defectPercent: defect,
-                        rejectionReason: reason
+                        rejectionReason: reason,
+                        color: ColorProfile(
+                            hue: hue,
+                            saturation: Double.random(in: 90...170),
+                            brightness: Double.random(in: 140...210),
+                            blushCoverage: Double.random(in: 2...35)
+                        )
                     )
                 )
             }

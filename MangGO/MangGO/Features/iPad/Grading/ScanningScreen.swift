@@ -12,14 +12,22 @@ struct ScanningScreen: View {
 
     let phase: StationSnapshot.Phase
 
+    /// Denyut halus menggantikan `symbolEffect(.pulse)` yang dulu dipakai —
+    /// efek itu hanya berlaku untuk SF Symbol, bukan ilustrasi dari aset.
+    @State private var isPulsing = false
+
     var body: some View {
         VStack(spacing: 32) {
-            // Ganti dengan Image("mango-illustration") setelah aset masuk.
-            Image(systemName: "circle.hexagongrid.fill")
-                .font(.system(size: 120))
-                .foregroundStyle(.orange)
+            Image("while_grading")
+                .resizable()
+                .scaledToFit()
                 .frame(height: 200)
-                .symbolEffect(.pulse)
+                .opacity(isPulsing ? 0.65 : 1.0)
+                .animation(
+                    .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                    value: isPulsing
+                )
+                .onAppear { isPulsing = true }
 
             // Progress meloncat per fase, bukan mengalir dari timer — bar yang
             // halus saat sistem macet di weighing akan menyesatkan worker.

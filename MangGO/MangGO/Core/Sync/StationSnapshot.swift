@@ -28,10 +28,10 @@ struct StationSnapshot: Codable, Sendable, Equatable {
         var label: String {
             switch self {
             case .idle: "Menunggu Mangga"
-            case .scanningFront: "Memindai Sisi Depan..."
+            case .scanningFront: "Memindai..."
             case .flipping: "Membalik Mangga..."
             case .weighing: "Menimbang..."
-            case .scanningBack: "Memindai Sisi Belakang..."
+            case .scanningBack: "Memindai..."
             case .done: "Selesai"
             }
         }
@@ -73,6 +73,16 @@ struct StationSnapshot: Codable, Sendable, Equatable {
         var score: Double?
         var weightGrams: Double?
         var defectPercent: Double?
+
+        /// HSV median kulit buah + cakupan blush, apa adanya dari
+        /// `VisionFruitIsolator`.
+        ///
+        /// Dulu tidak ikut dikirim, jadi iPad sama sekali tidak punya data warna
+        /// dan kartu "warna" di layar detail terpaksa diisi teks mati. Akibatnya
+        /// bukan cuma kosmetik: indikator yang bobotnya 30% di `GradingStandard`
+        /// jadi tidak bisa dilihat **maupun** di-debug dari sisi operator.
+        var color: ColorProfile?
+
         var gradedAt: Date
 
         /// Foto dokumentasi (JPEG) untuk mangga **reject** saja. Sisi A = capture

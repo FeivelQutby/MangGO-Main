@@ -21,16 +21,32 @@ import CoreVideo
 actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
 
     struct Options: Sendable {
-        /// Area frame yang boleh dianggap buah, koordinat Vision ternormalisasi.
-        /// Persempit ini kalau posisi buah di rig sudah tetap — cara termurah
-        /// membuang mangga kedua di wadah atas dari pertimbangan.
+        /// Area frame yang boleh ditempati titik berat buah, koordinat Vision
+        /// ternormalisasi (origin kiri-bawah).
+        ///
+        /// SETEL INI begitu posisi buah di rig diukur — ini cara termurah
+        /// membuang mangga di wadah atas, kabel, dan dudukan dari pertimbangan,
+        /// jauh lebih murah daripada mengetatkan ambang warna. Dibiarkan seluruh
+        /// frame karena geometrinya hanya bisa diukur dari perangkat sungguhan:
+        /// isi dengan kotak tempat buah benar-benar muncul, jangan menebak —
+        /// angka tebakan persis yang membuat `bowlFallbackCrop` di
+        /// `CaptureViewModel` berakhir memotret sekrup.
         var regionOfInterest = CGRect(x: 0, y: 0, width: 1, height: 1)
 
         /// Luas siluet relatif frame yang dianggap masuk akal untuk satu buah.
-        /// Batas bawah sedikit lebih longgar dari nilai awal (0.04 → 0.03) untuk
-        /// mangga yang agak jauh; TIDAK diturunkan lebih dari itu karena yang
-        /// bikin kabel/kardus di dasar box ikut kepilih bukan luasnya, tapi warna.
-        var areaRatioRange: ClosedRange<Double> = 0.03...0.95
+        ///
+        /// Batas bawah dinaikkan 0.03 → 0.05, dan alasannya bukan sekadar ingin
+        /// lebih ketat: `MangoSample.spotCoverage` MEMBAGI dengan angka ini,
+        /// jadi siluet 3% membuat luas bintik sekecil apa pun tampak besar.
+        /// Sejak pecahan siluet digabung di `merging(_:bitmap:)`, siluet sekecil
+        /// itu hampir pasti bukan buah utuh — menolaknya di sini lebih jujur
+        /// daripada melaporkan persentase yang meledak.
+        var areaRatioRange: ClosedRange<Double> = 0.05...0.95
+
+        /// Jarak toleransi (fraksi sisi frame) saat memutuskan dua pecahan
+        /// siluet bersebelahan dan layak digabung. `0` berarti kotaknya harus
+        /// benar-benar bersinggungan.
+        var instanceMergeTolerance: Double = 0.02
 
         /// Fraksi minimum piksel yang harus berwarna seperti kulit mangga.
         /// Dikembalikan ke 0.5 (dari 0.4): kabel jumper oranye/kuning + kardus
@@ -92,10 +108,15 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
             throw VisionError.unsupportedImage
         }
 
-        let candidates = observation.allInstances.compactMap { index -> Candidate? in
+        let instances = observation.allInstances.compactMap { index -> PixelMask? in
             guard index > 0, index <= Int(UInt8.max) else { return nil }
-            return evaluate(instance: UInt8(index), in: indexMask, bitmap: bitmap)
+            return indexMask.isolating(instance: UInt8(index))
         }
+
+        let candidates = merging(
+            instances.compactMap { evaluate(mask: $0, bitmap: bitmap) },
+            bitmap: bitmap
+        )
 
         // Instance terbesar yang lolos, bukan yang paling percaya diri: buah yang
         // sedang di-scan selalu paling dekat kamera, jadi mangga di wadah atas
@@ -116,6 +137,7 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
             areaRatio: chosen.areaRatio,
             color: chosen.colorProfile,
             mask: chosen.mask.eroded(by: options.maskErosion),
+            silhouette: chosen.mask,
             candidateCount: candidates.count
         )
     }
@@ -138,8 +160,76 @@ actor VisionFruitIsolator: FruitIsolating, FruitSegmenting {
         let colorProfile: ColorProfile
     }
 
-    private func evaluate(instance index: UInt8, in indexMask: PixelMask, bitmap: RGBBitmap) -> Candidate? {
-        let mask = indexMask.isolating(instance: index)
+    /// Menyatukan pecahan siluet yang sebenarnya satu buah.
+    ///
+    /// Vision kadang mengangkat satu mangga sebagai beberapa instance — bagian
+    /// yang kena cahaya dan bagian yang di bayangan terpisah, atau tangkai
+    /// terlepas dari badannya. Kalau itu terjadi, memilih "instance terluas"
+    /// berarti memilih SEPARUH buah. Akibatnya berantai: `areaRatio` jadi
+    /// separuh, dan karena `spotCoverage` membaginya, persentase bintik langsung
+    /// berlipat tanpa ada yang berubah pada buahnya. Inilah kenapa satu mangga
+    /// yang sama bisa lolos di satu pengambilan dan ditolak di pengambilan
+    /// berikutnya hanya karena pencahayaan bergeser sedikit.
+    ///
+    /// Syarat gabung sengaja ketat: hanya kandidat yang **masing-masing** sudah
+    /// berwarna kulit buah dan kotaknya bersinggungan. Dudukan biru dan kabel
+    /// tidak lolos syarat warna, jadi tidak ikut tertarik masuk — kalau ikut,
+    /// mask-nya justru membengkak dan buahnya malah gagal dikenali.
+    private func merging(_ candidates: [Candidate], bitmap: RGBBitmap) -> [Candidate] {
+        let fruitLike = candidates.filter { $0.fruitLikeness >= options.minFruitLikeness }
+        guard fruitLike.count > 1 else { return candidates }
+
+        // Digabung berulang sampai stabil, bukan sekali jalan: A bisa
+        // bersinggungan dengan C dan B juga dengan C tanpa A menyentuh B, dan
+        // ketiganya tetap harus berakhir di satu grup.
+        var groups: [[Candidate]] = fruitLike.map { [$0] }
+        var didMerge = true
+
+        while didMerge {
+            didMerge = false
+            merge: for i in groups.indices {
+                for j in groups.indices where j > i {
+                    let adjacent = groups[i].contains { left in
+                        groups[j].contains { touching(left.bounds, $0.bounds) }
+                    }
+                    guard adjacent else { continue }
+
+                    groups[i].append(contentsOf: groups[j])
+                    groups.remove(at: j)
+                    didMerge = true
+                    break merge
+                }
+            }
+        }
+
+        // Kandidat yang warnanya bukan kulit buah dibiarkan lewat apa adanya.
+        // Mereka akan gugur sendiri di `isPlausible`, tapi tetap ikut terhitung
+        // di `candidateCount` sebagai penanda "ada objek lain di frame".
+        let others = candidates.filter { $0.fruitLikeness < options.minFruitLikeness }
+
+        let merged = groups.compactMap { group -> Candidate? in
+            guard let first = group.first else { return nil }
+            guard group.count > 1 else { return first }
+
+            // Warna dan luas dihitung ulang pada mask gabungan — bukan diambil
+            // dari pecahan terbesar — supaya median HSV mewakili seluruh buah.
+            let union = group.dropFirst().reduce(first.mask) { $0.union($1.mask) }
+            return evaluate(mask: union, bitmap: bitmap) ?? first
+        }
+
+        return merged + others
+    }
+
+    /// Dua kotak dianggap bersebelahan kalau bersinggungan setelah masing-masing
+    /// dilebarkan `instanceMergeTolerance`. Toleransi ini menutup celah tipis
+    /// antara dua pecahan mask yang dipisahkan garis bayangan.
+    private func touching(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        let tolerance = CGFloat(options.instanceMergeTolerance)
+        return lhs.insetBy(dx: -tolerance, dy: -tolerance)
+            .intersects(rhs.insetBy(dx: -tolerance, dy: -tolerance))
+    }
+
+    private func evaluate(mask: PixelMask, bitmap: RGBBitmap) -> Candidate? {
         guard let bounds = mask.normalizedBounds,
               let centroid = mask.normalizedCentroid else { return nil }
 

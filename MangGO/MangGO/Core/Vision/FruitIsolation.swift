@@ -29,11 +29,23 @@ struct FruitIsolation: @unchecked Sendable {
     let color: ColorProfile
 
     /// Siluet buah yang sudah dikikis, dalam koordinat frame penuh.
-    /// Dipakai membuang deteksi yang jatuh di latar.
+    /// Dipakai **hanya** untuk membuang deteksi yang jatuh di latar.
+    ///
+    /// Jangan dipakai mengukur luas: pengikisan memangkas beberapa piksel tepi,
+    /// jadi luasnya sedikit lebih kecil dari siluet yang menghasilkan
+    /// `areaRatio`. Untuk pengukuran, pakai `silhouette`.
     let mask: PixelMask
 
-    /// Berapa banyak instance latar-depan yang dilihat Vision. Lebih dari satu
-    /// artinya ada objek lain yang ikut terangkat dan salah satu dibuang.
+    /// Siluet buah **tanpa pengikisan**, koordinat frame penuh.
+    ///
+    /// Ini siluet yang menghasilkan `areaRatio`, jadi luas bintik harus diukur
+    /// terhadap mask yang sama supaya pembilang dan penyebut `spotCoverage`
+    /// benar-benar sebanding.
+    let silhouette: PixelMask
+
+    /// Berapa banyak instance latar-depan yang dilihat Vision, dihitung setelah
+    /// pecahan siluet yang bersebelahan digabung. Lebih dari satu artinya ada
+    /// objek lain yang ikut terangkat dan salah satu dibuang.
     let candidateCount: Int
 }
 
@@ -47,6 +59,12 @@ protocol FruitIsolating: Sendable {
 struct DefectAnalysis: Sendable {
     var defects: [DefectObservation]
     var fruitAreaRatio: Double
+
+    /// Luas bintik terhadap **frame penuh**, diukur sebagai union kotak deteksi
+    /// yang diiris dengan siluet buah. Sengaja memakai penyebut yang sama dengan
+    /// `fruitAreaRatio` supaya keduanya bisa langsung dibagi tanpa konversi.
+    var defectAreaRatio: Double
+
     var color: ColorProfile
 
     /// Deteksi yang dibuang karena tidak cukup tumpang tindih dengan siluet buah.

@@ -44,12 +44,25 @@ final class MangoImageStore {
 
     // MARK: - Save
 
+    /// Tiap sisi ditulis terpisah supaya kegagalan salah satu tidak ikut
+    /// membatalkan yang lain — mangga reject dengan satu sisi tetap lebih
+    /// berguna daripada tanpa foto sama sekali.
     func save(id: UUID, sideA: Data?, sideB: Data?) {
-        if let sideA {
-            try? sideA.write(to: url(id, .a), options: .atomic)
+        write(sideA, id: id, side: .a)
+        write(sideB, id: id, side: .b)
+    }
+
+    private func write(_ data: Data?, id: UUID, side: Side) {
+        guard let data else {
+            print("ℹ️ Foto sisi \(side.rawValue) untuk \(id) tidak dikirim")
+            return
         }
-        if let sideB {
-            try? sideB.write(to: url(id, .b), options: .atomic)
+
+        do {
+            try data.write(to: url(id, side), options: .atomic)
+            print("💾 Foto sisi \(side.rawValue) tersimpan (\(data.count) B) untuk \(id)")
+        } catch {
+            print("❌ Gagal menyimpan foto sisi \(side.rawValue): \(error.localizedDescription)")
         }
     }
 
@@ -60,9 +73,12 @@ final class MangoImageStore {
         return UIImage(data: data)
     }
 
+    func hasImage(id: UUID, side: Side) -> Bool {
+        FileManager.default.fileExists(atPath: url(id, side).path)
+    }
+
     func hasImages(id: UUID) -> Bool {
-        FileManager.default.fileExists(atPath: url(id, .a).path)
-            || FileManager.default.fileExists(atPath: url(id, .b).path)
+        hasImage(id: id, side: .a) || hasImage(id: id, side: .b)
     }
 
     // MARK: - Debug
