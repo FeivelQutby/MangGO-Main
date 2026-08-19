@@ -24,14 +24,63 @@ struct RejectedMangoListView: View {
 
     let rejectedRecords: [MangoRecord]
 
+    /// Label asal layar — "Data Harian" atau "Tren 7 Hari" dst. Ikut ditampilkan
+    /// di header dan diteruskan ke layar detail.
+    var contextTitle: String = "Data Harian"
+
+    /// Diisi hanya kalau layar ini dibuka dari Tren. Rentang dan kelompok
+    /// tanggalnya datang utuh dari layar Tren, jadi filter waktu di sini adalah
+    /// penyempitan dari pilihan sebelumnya — bukan filter baru yang berdiri
+    /// sendiri. `nil` (mis. dari Data Harian) berarti tombol filter tanggal
+    /// tidak relevan dan tidak ditampilkan.
+    var dateContext: TrendDateContext? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var sortOption: RejectSortOption = .timestampNewest
     @State private var showingSortPopover = false
+    @State private var showingDateFilterPopover = false
     @State private var selectedRecordForDetail: MangoRecord? = nil
+
+    /// `nil` = belum disentuh operator, artinya seluruh kelompok ikut tampil.
+    /// Begitu ada satu centang dilepas, isinya jadi daftar kelompok yang aktif.
+    @State private var selectedBucketIDs: Set<Int>? = nil
+
+    private var buckets: [TrendDateContext.Bucket] {
+        dateContext?.buckets ?? []
+    }
+
+    /// Kelompok yang tercentang saat ini — default semua.
+    private var activeBucketIDs: Set<Int> {
+        selectedBucketIDs ?? Set(buckets.map(\.id))
+    }
+
+    private var isDateFilterNarrowed: Bool {
+        guard let selectedBucketIDs else { return false }
+        return selectedBucketIDs.count != buckets.count
+    }
+
+    private func toggleBucket(_ id: Int) {
+        var next = activeBucketIDs
+        if next.contains(id) {
+            next.remove(id)
+        } else {
+            next.insert(id)
+        }
+        selectedBucketIDs = next
+    }
 
     private var filteredAndSortedRecords: [MangoRecord] {
         var list = rejectedRecords
+
+        // Penyempitan per kelompok tanggal. Dilewati kalau operator belum
+        // mengubah apa pun, supaya hasilnya identik dengan sebelum fitur ini ada.
+        if let dateContext, let selectedBucketIDs {
+            list = list.filter {
+                selectedBucketIDs.contains(dateContext.bucketIndex(for: $0.timestamp))
+            }
+        }
+
         if !searchText.isEmpty {
             list = list.filter {
                 $0.formattedCode.localizedCaseInsensitiveContains(searchText) ||
@@ -73,18 +122,13 @@ struct RejectedMangoListView: View {
 
                 // Title & Subtitle
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Data Harian")
+                    Text(contextTitle)
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
-                    if let firstDate = rejectedRecords.first?.timestamp {
-                        Text(firstDate.formatted(date: .abbreviated, time: .omitted))
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
-                    } else {
-                        Text(Date().formatted(date: .abbreviated, time: .omitted))
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
-                    }
+
+                    Text(headerSubtitle)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
                 }
 
                 Spacer()
@@ -106,43 +150,67 @@ struct RejectedMangoListView: View {
                             .font(.system(size: 24, weight: .bold))
                             .foregroundStyle(Color(red: 26/255, green: 26/255, blue: 26/255))
 
-                        Button(action: { showingSortPopover = true }) {
-                            HStack(spacing: 8) {
-                                Text("Urutkan")
-                                    .font(.system(size: 16, weight: .medium))
-                                Image(systemName: "line.3.horizontal.decrease")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.white, in: .capsule)
-                        }
-                        .popover(isPresented: $showingSortPopover) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(RejectSortOption.allCases) { option in
-                                    Button(action: {
-                                        sortOption = option
-                                        showingSortPopover = false
-                                    }) {
-                                        HStack {
-                                            Text(option.rawValue)
-                                                .font(.system(size: 16, weight: sortOption == option ? .semibold : .medium))
-                                                .foregroundStyle(sortOption == option ? Color(red: 0/255, green: 136/255, blue: 255/255) : Color.black)
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(
-                                            sortOption == option ? Color(red: 224/255, green: 241/255, blue: 255/255) : Color.clear,
-                                            in: .rect(cornerRadius: 8)
-                                        )
+                        HStack(spacing: 12) {
+                            // Filter tanggal hanya muncul kalau layar ini dibuka
+                            // dari Tren — kelompoknya persis kolom bar chart di
+                            // sana, jadi pilihan filter sebelumnya tidak hilang.
+                            if dateContext != nil {
+                                Button(action: { showingDateFilterPopover = true }) {
+                                    HStack(spacing: 8) {
+                                        Text(dateFilterLabel)
+                                            .font(.system(size: 16, weight: .medium))
+                                        Image(systemName: "calendar")
+                                            .font(.system(size: 14, weight: .semibold))
                                     }
+                                    .foregroundStyle(isDateFilterNarrowed ? Color.blue : .black)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.white, in: .capsule)
+                                }
+                                .popover(isPresented: $showingDateFilterPopover) {
+                                    dateFilterPopover
+                                        .presentationCompactAdaptation(.popover)
                                 }
                             }
-                            .padding(12)
-                            .frame(width: 260)
-                            .presentationCompactAdaptation(.popover)
+
+                            Button(action: { showingSortPopover = true }) {
+                                HStack(spacing: 8) {
+                                    Text("Urutkan")
+                                        .font(.system(size: 16, weight: .medium))
+                                    Image(systemName: "line.3.horizontal.decrease")
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.white, in: .capsule)
+                            }
+                            .popover(isPresented: $showingSortPopover) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(RejectSortOption.allCases) { option in
+                                        Button(action: {
+                                            sortOption = option
+                                            showingSortPopover = false
+                                        }) {
+                                            HStack {
+                                                Text(option.rawValue)
+                                                    .font(.system(size: 16, weight: sortOption == option ? .semibold : .medium))
+                                                    .foregroundStyle(sortOption == option ? Color(red: 0/255, green: 136/255, blue: 255/255) : Color.black)
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                sortOption == option ? Color(red: 224/255, green: 241/255, blue: 255/255) : Color.clear,
+                                                in: .rect(cornerRadius: 8)
+                                            )
+                                        }
+                                    }
+                                }
+                                .padding(12)
+                                .frame(width: 260)
+                                .presentationCompactAdaptation(.popover)
+                            }
                         }
                     }
 
@@ -217,10 +285,98 @@ struct RejectedMangoListView: View {
         .sheet(item: $selectedRecordForDetail) { record in
             RejectedMangoDetailView(
                 selectedRecord: record,
-                allRecords: rejectedRecords,
-                contextTitle: "Data Harian"
+                allRecords: filteredAndSortedRecords,
+                contextTitle: contextTitle
             )
+            // Sheet form-sheet bawaan iPad terlalu sempit untuk dua foto
+            // berdampingan + tiga kartu penyebab; `.page` melebarkannya tanpa
+            // mengubah gaya presentasi.
+            .presentationSizing(.page)
         }
+    }
+
+    // MARK: - Header helpers
+
+    private var headerSubtitle: String {
+        if let dateContext {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "d MMM yyyy"
+            formatter.locale = Locale(identifier: "id_ID")
+            return "\(formatter.string(from: dateContext.startDate)) - \(formatter.string(from: dateContext.endDate))"
+        }
+
+        let date = rejectedRecords.first?.timestamp ?? Date()
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private var dateFilterLabel: String {
+        guard isDateFilterNarrowed else { return "Filter Tanggal" }
+        return "Filter Tanggal (\(activeBucketIDs.count)/\(buckets.count))"
+    }
+
+    // MARK: - Date Filter Popover
+
+    /// Daftar centang per kelompok tanggal, mengikuti rentang yang dipilih di
+    /// layar Tren. Barisnya sama dengan kolom bar chart di sana.
+    private var dateFilterPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(contextTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(red: 114/255, green: 114/255, blue: 114/255))
+
+                Spacer()
+
+                Button(isDateFilterNarrowed ? "Pilih Semua" : "Hapus Semua") {
+                    selectedBucketIDs = isDateFilterNarrowed ? nil : []
+                }
+                .font(.system(size: 14, weight: .medium))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color(red: 0/255, green: 136/255, blue: 255/255))
+            }
+            .padding(.horizontal, 4)
+
+            VStack(spacing: 6) {
+                ForEach(buckets) { bucket in
+                    let isOn = activeBucketIDs.contains(bucket.id)
+
+                    Button {
+                        toggleBucket(bucket.id)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(
+                                    isOn
+                                    ? Color(red: 0/255, green: 136/255, blue: 255/255)
+                                    : Color(red: 174/255, green: 174/255, blue: 178/255)
+                                )
+
+                            Text(bucket.label)
+                                .font(.system(size: 16, weight: isOn ? .semibold : .regular))
+                                .foregroundStyle(
+                                    isOn
+                                    ? Color(red: 0/255, green: 136/255, blue: 255/255)
+                                    : Color.black
+                                )
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            isOn
+                            ? Color(red: 224/255, green: 241/255, blue: 255/255)
+                            : Color.clear,
+                            in: .rect(cornerRadius: 8)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 280)
     }
 }
 

@@ -29,7 +29,9 @@ struct RejectedMangoDetailView: View {
                         Text("Log Mangga Reject")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.black)
-                        Text("Tren 7 Hari")
+                        // Ikut konteks layar pemanggil ("Data Harian" / "Tren 30
+                        // Hari"), bukan lagi teks "Tren 7 Hari" yang di-hardcode.
+                        Text(contextTitle)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                     }
@@ -107,9 +109,14 @@ struct RejectedMangoDetailView: View {
                     
                     // Right Detail Card
                     VStack(spacing: 24) {
-                        Text("Detail Reject")
+                        // Judul ikut kode mangga yang sedang dibuka, supaya
+                        // operator tahu baris mana yang sedang dilihat tanpa
+                        // harus mencocokkan ke sidebar.
+                        Text("Detail Reject Mangga \(selectedRecord.formattedCode)")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.black)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         
                         // Foto Mangga Section
                         VStack(alignment: .leading, spacing: 12) {

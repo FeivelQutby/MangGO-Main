@@ -18,6 +18,125 @@ enum DateRangeFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Rentang waktu Tren yang sedang aktif, lengkap dengan pengelompokannya.
+///
+/// Dibuat supaya layar turunan Tren (mis. "Log Mangga Reject") memakai rentang
+/// dan kelompok tanggal yang **sama persis** dengan bar chart di layar Tren,
+/// bukan menghitung ulang sendiri. Selama keduanya membaca dari sini, filter di
+/// layar awal otomatis ikut terbawa dan tidak ada dua sumber kebenaran yang bisa
+/// berbeda diam-diam.
+struct TrendDateContext: Equatable {
+
+    var filter: DateRangeFilter
+    var anchorDate: Date
+
+    /// Satu kolom pada bar chart Tren, sekaligus satu baris pada daftar filter
+    /// tanggal di layar Log Mangga Reject.
+    struct Bucket: Identifiable, Hashable {
+        let index: Int
+        let label: String
+        let start: Date
+        let end: Date
+
+        var id: Int { index }
+    }
+
+    // MARK: Rentang
+
+    var startDate: Date {
+        let calendar = Calendar.current
+        switch filter {
+        case .last7:
+            return calendar.date(byAdding: .day, value: -6, to: anchorDate) ?? anchorDate
+        case .last30:
+            return calendar.date(byAdding: .day, value: -29, to: anchorDate) ?? anchorDate
+        case .last90:
+            return calendar.date(byAdding: .day, value: -89, to: anchorDate) ?? anchorDate
+        }
+    }
+
+    var endDate: Date { anchorDate }
+
+    // MARK: Pengelompokan
+
+    /// Lebar tiap kelompok dalam hari. Angka-angka ini yang dulu tersebar di
+    /// `stackedChartData` sebagai pembagi (`/ 6`, `/ 15`).
+    var bucketSpanDays: Int {
+        switch filter {
+        case .last7: 1
+        case .last30: 6
+        case .last90: 15
+        }
+    }
+
+    var bucketCount: Int {
+        switch filter {
+        case .last7: 7
+        case .last30: 5
+        case .last90: 6
+        }
+    }
+
+    private var gridStart: Date {
+        Calendar.current.startOfDay(for: startDate)
+    }
+
+    var buckets: [Bucket] {
+        let calendar = Calendar.current
+        let start = gridStart
+
+        return (0..<bucketCount).compactMap { index -> Bucket? in
+            guard let bucketStart = calendar.date(
+                byAdding: .day,
+                value: index * bucketSpanDays,
+                to: start
+            ),
+            let bucketEnd = calendar.date(
+                byAdding: .day,
+                value: bucketSpanDays - 1,
+                to: bucketStart
+            ) else { return nil }
+
+            return Bucket(
+                index: index,
+                label: Self.label(start: bucketStart, end: bucketEnd, spanDays: bucketSpanDays),
+                start: bucketStart,
+                end: bucketEnd
+            )
+        }
+    }
+
+    /// Kelompok tempat sebuah tanggal jatuh. Di-clamp ke rentang yang ada supaya
+    /// catatan tepat di tepi tidak pernah keluar dari indeks kelompok.
+    func bucketIndex(for date: Date) -> Int {
+        let calendar = Calendar.current
+        let dayDiff = calendar.dateComponents(
+            [.day],
+            from: gridStart,
+            to: calendar.startOfDay(for: date)
+        ).day ?? 0
+
+        return max(0, min(bucketCount - 1, dayDiff / bucketSpanDays))
+    }
+
+    /// Label kelompok: satu tanggal untuk 7 hari, rentang untuk 30 hari & 3 bulan.
+    private static func label(start: Date, end: Date, spanDays: Int) -> String {
+        let dayMonth = DateFormatter()
+        dayMonth.dateFormat = "d MMM"
+
+        guard spanDays > 1 else { return dayMonth.string(from: start) }
+
+        let calendar = Calendar.current
+        if calendar.component(.month, from: start) == calendar.component(.month, from: end) {
+            let day = DateFormatter()
+            day.dateFormat = "d"
+            return "\(day.string(from: start))-\(dayMonth.string(from: end))"
+        }
+
+        return "\(dayMonth.string(from: start)) - \(dayMonth.string(from: end))"
+    }
+}
+
 /// Layar Riwayat & Tren (History & Trend Screen) sesuai Figma Spec
 struct HistoryScreen: View {
 
@@ -46,24 +165,18 @@ struct HistoryScreen: View {
         customAnchorDate ?? allRecords.map(\.timestamp).max() ?? Date()
     }
 
-    /// Start date calculation
-    private var startDate: Date {
-        let calendar = Calendar.current
-        let anchor = currentAnchorDate
-        switch selectedFilter {
-        case .last7:
-            return calendar.date(byAdding: .day, value: -6, to: anchor) ?? anchor
-        case .last30:
-            return calendar.date(byAdding: .day, value: -29, to: anchor) ?? anchor
-        case .last90:
-            return calendar.date(byAdding: .day, value: -89, to: anchor) ?? anchor
-        }
+    /// Sumber tunggal rentang + pengelompokan tanggal. Dipakai layar ini untuk
+    /// bar chart, dan diteruskan apa adanya ke `RejectedMangoListView` supaya
+    /// filter yang dipilih di sini ikut terbawa ke Log Mangga Reject.
+    private var dateContext: TrendDateContext {
+        TrendDateContext(filter: selectedFilter, anchorDate: currentAnchorDate)
     }
 
+    /// Start date calculation
+    private var startDate: Date { dateContext.startDate }
+
     /// End date calculation
-    private var endDate: Date {
-        return currentAnchorDate
-    }
+    private var endDate: Date { dateContext.endDate }
 
     private var maxDate: Date {
         allRecords.map(\.timestamp).max() ?? Date()
@@ -294,8 +407,13 @@ struct HistoryScreen: View {
         }
         .background(Color(red: 242/255, green: 242/255, blue: 247/255))
         .fullScreenCover(isPresented: $showingRejectedList) {
+            // `dateContext` diteruskan supaya layar Log Mangga Reject memakai
+            // rentang dan kelompok tanggal yang sama dengan yang dipilih di sini,
+            // bukan membuat filter baru yang berdiri sendiri.
             RejectedMangoListView(
-                rejectedRecords: dateFilteredRecords.filter { $0.grade == .reject }
+                rejectedRecords: dateFilteredRecords.filter { $0.grade == .reject },
+                contextTitle: "Tren \(selectedFilter.rawValue)",
+                dateContext: dateContext
             )
         }
     }
@@ -309,78 +427,30 @@ struct HistoryScreen: View {
         let value: Double
     }
 
+    /// Pengelompokan kolom sekarang mengambil indeks dan label dari
+    /// `TrendDateContext` — persis daftar yang juga dipakai filter tanggal di
+    /// Log Mangga Reject, jadi kedua layar tidak bisa lagi berbeda.
     private var stackedChartData: [StackedChartItem] {
-        let calendar = Calendar.current
-        let anchorStart = calendar.startOfDay(for: startDate)
-        
+        let context = dateContext
         var groupMap: [Int: [GradeDisplay: Double]] = [:]
-        
+
         for record in dateFilteredRecords {
             let val = selectedMetric == .quantity ? 1.0 : (record.weightGrams / 1000.0)
-            let index: Int
-            
-            if selectedFilter == .last7 {
-                index = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
-            } else if selectedFilter == .last30 {
-                let dayDiff = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
-                index = max(0, min(4, dayDiff / 6))
-            } else {
-                let dayDiff = calendar.dateComponents([.day], from: anchorStart, to: calendar.startOfDay(for: record.timestamp)).day ?? 0
-                index = max(0, min(5, dayDiff / 15))
-            }
-            
+            let index = context.bucketIndex(for: record.timestamp)
             groupMap[index, default: [:]][record.grade, default: 0.0] += val
         }
-        
-        let maxIndex: Int
-        if selectedFilter == .last7 { maxIndex = 6 }
-        else if selectedFilter == .last30 { maxIndex = 4 }
-        else { maxIndex = 5 }
-        
+
         var items: [StackedChartItem] = []
-        for i in 0...maxIndex {
-            let label = labelForGroup(index: i, anchorStart: anchorStart, filter: selectedFilter)
-            let gradeDict = groupMap[i] ?? [:]
+        for bucket in context.buckets {
+            let gradeDict = groupMap[bucket.index] ?? [:]
             for grade in [GradeDisplay.reject, GradeDisplay.c, GradeDisplay.b, GradeDisplay.a] {
                 let val = gradeDict[grade] ?? 0.0
-                items.append(StackedChartItem(dateLabel: label, grade: grade, value: val))
+                items.append(
+                    StackedChartItem(dateLabel: bucket.label, grade: grade, value: val)
+                )
             }
         }
         return items
-    }
-    
-    private func labelForGroup(index: Int, anchorStart: Date, filter: DateRangeFilter) -> String {
-        let calendar = Calendar.current
-        if filter == .last7 {
-            let d = calendar.date(byAdding: .day, value: index, to: anchorStart)!
-            let fmt = DateFormatter()
-            fmt.dateFormat = "d MMM"
-            return fmt.string(from: d)
-        } else if filter == .last30 {
-            let start = calendar.date(byAdding: .day, value: index * 6, to: anchorStart)!
-            let end = calendar.date(byAdding: .day, value: 5, to: start)!
-            let fmtDay = DateFormatter()
-            fmtDay.dateFormat = "d"
-            let fmtDayMonth = DateFormatter()
-            fmtDayMonth.dateFormat = "d MMM"
-            if calendar.component(.month, from: start) == calendar.component(.month, from: end) {
-                return "\(fmtDay.string(from: start))-\(fmtDayMonth.string(from: end))"
-            } else {
-                return "\(fmtDayMonth.string(from: start)) - \(fmtDayMonth.string(from: end))"
-            }
-        } else {
-            let start = calendar.date(byAdding: .day, value: index * 15, to: anchorStart)!
-            let end = calendar.date(byAdding: .day, value: 14, to: start)!
-            let fmtDay = DateFormatter()
-            fmtDay.dateFormat = "d"
-            let fmtDayMonth = DateFormatter()
-            fmtDayMonth.dateFormat = "d MMM"
-            if calendar.component(.month, from: start) == calendar.component(.month, from: end) {
-                return "\(fmtDay.string(from: start))-\(fmtDayMonth.string(from: end))"
-            } else {
-                return "\(fmtDayMonth.string(from: start)) - \(fmtDayMonth.string(from: end))"
-            }
-        }
     }
 }
 

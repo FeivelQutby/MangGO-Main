@@ -24,20 +24,38 @@ struct IdleScreenView: View {
             Color(red: 247/255, green: 247/255, blue: 248/255)
                 .ignoresSafeArea()
             
-            VStack(spacing: 125) {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 64) {
-                        // Section 1: Status Sensor
-                        sensorStatusSection
-                        
-                        // Section 2: Mulai Grading Mangga
-                        gradingStepsSection
-                    }
-                    .padding(.bottom, 40)
+            // Dulu isinya dibungkus `VStack(spacing: 125)` berisi satu anak —
+            // spacing-nya tidak pernah berlaku, jadi "Status Sensor" menempel
+            // di tepi atas ScrollView. Jarak atas/bawah sekarang diatur lewat
+            // padding supaya kedua section duduk seimbang di tengah layar.
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 56) {
+                    // Section 1: Status Sensor
+                    sensorStatusSection
+
+                    // Section 2: Mulai Grading Mangga
+                    gradingStepsSection
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48)
+                .padding(.bottom, 48)
+            }
+            .padding(.horizontal, 40)
+
+            // Tombol bantuan mengambang di pojok — satu-satunya jejak helpdesk
+            // di layar sampai operator menekannya. Ditaruh di ZStack, bukan di
+            // dalam ScrollView, supaya posisinya tetap dan tidak ikut menggeser
+            // spacing dua section di atas.
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    helpButton
                 }
             }
             .padding(.horizontal, 40)
-            
+            .padding(.bottom, 32)
+
             // Overlap Background Dimming & Pop-up Error
             if showErrorPopup {
                 Color.black.opacity(0.3)
@@ -77,6 +95,41 @@ struct IdleScreenView: View {
         }
     }
     
+    // MARK: - Tombol Bantuan
+
+    /// Pintu masuk manual ke pop-up teknisi. Pop-up yang sama tetap muncul
+    /// sendiri saat ada sensor gagal — tombol ini untuk operator yang butuh
+    /// bantuan padahal semua sensor terlihat normal.
+    private var helpButton: some View {
+        Button {
+            withAnimation {
+                showErrorPopup = true
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Butuh bantuan?")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundColor(Color(red: 0/255, green: 122/255, blue: 255/255))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(Color.white, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        Color(red: 0/255, green: 122/255, blue: 255/255).opacity(0.18),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Butuh bantuan")
+        .accessibilityHint("Tampilkan informasi menghubungi teknisi")
+    }
+
     // MARK: - Sensor Status Section
     private var sensorStatusSection: some View {
         VStack(spacing: 24) {
@@ -204,13 +257,17 @@ struct SensorErrorPopupView: View {
             .cornerRadius(20)
             
             // Pesan Teks
+            // Pop-up ini sendiri sudah berperan sebagai "informasi bantuan yang
+            // muncul setelah ikon ditekan", jadi teksnya tampil apa adanya di
+            // sini — yang disembunyikan di balik tombol adalah pop-up-nya.
             Text("Jika sensor gagal terhubung dalam 2 menit, silakan hubungi teknisi")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(.black)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
-            
+
             // Tombol CTA
             HStack(spacing: 16) {
                 // Tombol Nanti
