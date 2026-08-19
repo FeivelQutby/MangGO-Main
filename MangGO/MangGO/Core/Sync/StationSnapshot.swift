@@ -28,10 +28,10 @@ struct StationSnapshot: Codable, Sendable, Equatable {
         var label: String {
             switch self {
             case .idle: "Menunggu Mangga"
-            case .scanningFront: "Memindai Sisi Depan..."
+            case .scanningFront: "Memindai..."
             case .flipping: "Membalik Mangga..."
             case .weighing: "Menimbang..."
-            case .scanningBack: "Memindai Sisi Belakang..."
+            case .scanningBack: "Memindai..."
             case .done: "Selesai"
             }
         }

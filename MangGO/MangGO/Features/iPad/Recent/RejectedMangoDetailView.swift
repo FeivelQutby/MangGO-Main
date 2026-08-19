@@ -6,7 +6,10 @@ struct RejectedMangoDetailView: View {
     @State var selectedRecord: MangoRecord
     let allRecords: [MangoRecord]
     let contextTitle: String
-    
+
+    /// Foto yang sedang dibuka besar. `nil` = tidak ada pratinjau.
+    @State private var preview: MangoPhotoPreview? = nil
+
     var body: some View {
         ZStack {
             Color(red: 247/255, green: 247/255, blue: 248/255)
@@ -132,13 +135,25 @@ struct RejectedMangoDetailView: View {
                                     title: "SISI A",
                                     subtitle: "Bagian Depan",
                                     recordID: selectedRecord.id,
-                                    side: .a
+                                    side: .a,
+                                    onTap: { image in
+                                        preview = MangoPhotoPreview(
+                                            title: "\(selectedRecord.formattedCode) — Sisi A (Bagian Depan)",
+                                            image: image
+                                        )
+                                    }
                                 )
                                 MangoPhotoBox(
                                     title: "SISI B",
                                     subtitle: "Bagian Belakang",
                                     recordID: selectedRecord.id,
-                                    side: .b
+                                    side: .b,
+                                    onTap: { image in
+                                        preview = MangoPhotoPreview(
+                                            title: "\(selectedRecord.formattedCode) — Sisi B (Bagian Belakang)",
+                                            image: image
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -195,6 +210,11 @@ struct RejectedMangoDetailView: View {
             .padding(.bottom, 24)
         }
         .navigationBarBackButtonHidden(true)
+        .fullScreenCover(item: $preview) { item in
+            MangoPhotoViewerView(preview: item) {
+                preview = nil
+            }
+        }
     }
 }
 
@@ -212,6 +232,10 @@ struct MangoPhotoBox: View {
     let recordID: UUID
     let side: MangoImageStore.Side
 
+    /// Dipanggil saat kotak ditekan, hanya kalau fotonya memang ada. Kotak
+    /// kosong sengaja tidak bisa ditekan supaya tidak membuka pratinjau hampa.
+    var onTap: ((UIImage) -> Void)? = nil
+
     @State private var image: UIImage?
 
     var body: some View {
@@ -228,26 +252,50 @@ struct MangoPhotoBox: View {
                 }
             }
 
-            Group {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    placeholder
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 180)
-            .background(Color(red: 240/255, green: 240/255, blue: 243/255))
-            .cornerRadius(16)
-            .clipped()
+            photoFrame
         }
         // `id:` supaya kotak ikut memuat ulang ketika operator memilih kode
         // mangga lain di sidebar, bukan menahan foto record sebelumnya.
         .task(id: recordID) {
             image = MangoImageStore.shared.image(id: recordID, side: side)
         }
+    }
+
+    @ViewBuilder
+    private var photoFrame: some View {
+        if let image {
+            Button {
+                onTap?(image)
+            } label: {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipped()
+                    .overlay(alignment: .bottomTrailing) { zoomBadge }
+                    .background(Color(red: 240/255, green: 240/255, blue: 243/255))
+                    .cornerRadius(16)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Perbesar foto \(title)")
+        } else {
+            placeholder
+                .frame(maxWidth: .infinity)
+                .frame(height: 180)
+                .background(Color(red: 240/255, green: 240/255, blue: 243/255))
+                .cornerRadius(16)
+        }
+    }
+
+    /// Petunjuk kecil bahwa foto bisa ditekan.
+    private var zoomBadge: some View {
+        Image(systemName: "arrow.up.left.and.arrow.down.right")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: 28, height: 28)
+            .background(Color.black.opacity(0.45), in: Circle())
+            .padding(10)
     }
 
     private var placeholder: some View {
@@ -261,6 +309,71 @@ struct MangoPhotoBox: View {
                 .foregroundColor(.gray)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Photo Viewer
+
+/// Foto yang sedang dibuka besar. `id` baru tiap kali dibuat supaya
+/// `fullScreenCover(item:)` ikut berganti kalau operator langsung pindah dari
+/// satu sisi ke sisi lain.
+struct MangoPhotoPreview: Identifiable {
+    let id = UUID()
+    let title: String
+    let image: UIImage
+}
+
+/// Pratinjau foto satu layar penuh. Tombol X di kanan atas mengikuti gaya yang
+/// sama dengan `ResultScreen` supaya cara menutup layar konsisten di seluruh app.
+struct MangoPhotoViewerView: View {
+
+    let preview: MangoPhotoPreview
+    var onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.94)
+                .ignoresSafeArea()
+                // Ketuk di luar foto juga menutup — tombol X tetap jalur utamanya.
+                .onTapGesture { onClose() }
+
+            VStack(spacing: 20) {
+                Text(preview.title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Image(uiImage: preview.image)
+                    .resizable()
+                    .scaledToFit()
+                    .cornerRadius(16)
+            }
+            .padding(.horizontal, 60)
+            .padding(.top, 80)
+            .padding(.bottom, 60)
+
+            // MARK: - Close Button
+            VStack {
+                HStack {
+                    Spacer()
+
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 44, height: 44)
+                            .background(.white.opacity(0.85))
+                            .clipShape(Circle())
+                    }
+                    .padding(.top, 16)
+                    .padding(.trailing, 20)
+                    .accessibilityLabel("Tutup pratinjau foto")
+                }
+
+                Spacer()
+            }
+        }
     }
 }
 
