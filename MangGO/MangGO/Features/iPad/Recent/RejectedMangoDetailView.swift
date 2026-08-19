@@ -185,6 +185,7 @@ struct RejectedMangoDetailView: View {
                                     textColor: Color(red: 180/255, green: 40/255, blue: 50/255)
                                 )
                                 
+                                // di sini
                                 RejectCauseCard(
                                     title: "warna",
                                     icon: "circle.fill",
