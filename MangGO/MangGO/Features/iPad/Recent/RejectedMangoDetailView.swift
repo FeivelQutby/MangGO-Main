@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RejectedMangoDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -116,9 +117,22 @@ struct RejectedMangoDetailView: View {
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.black)
                             
+                            // Foto asli hasil capture, dimuat lewat id record
+                            // yang sama dengan yang dipakai saat menyimpan di
+                            // `iPadView.saveLatestResult`.
                             HStack(spacing: 20) {
-                                MangoPhotoBox(title: "SISI A", imageName: "mango_side_a")
-                                MangoPhotoBox(title: "SISI B", imageName: "mango_side_b")
+                                MangoPhotoBox(
+                                    title: "SISI A",
+                                    subtitle: "Bagian Depan",
+                                    recordID: selectedRecord.id,
+                                    side: .a
+                                )
+                                MangoPhotoBox(
+                                    title: "SISI B",
+                                    subtitle: "Bagian Belakang",
+                                    recordID: selectedRecord.id,
+                                    side: .b
+                                )
                             }
                         }
                         
@@ -179,26 +193,67 @@ struct RejectedMangoDetailView: View {
 
 // MARK: - Subviews & Components
 
+/// Satu kotak foto dokumentasi reject. Gambarnya dibaca dari
+/// `MangoImageStore` — bukan dari asset catalog: foto ini dibuat saat runtime
+/// oleh iPhone dan dikirim lewat `StationSnapshot`, jadi tidak mungkin ada
+/// sebagai aset yang di-bundle. Versi sebelumnya menunjuk ke nama aset
+/// `mango_side_a`/`mango_side_b` yang tidak pernah ada, jadi kedua kotak selalu
+/// kosong walaupun foto sebenarnya tersimpan di disk.
 struct MangoPhotoBox: View {
     let title: String
-    let imageName: String
-    
+    var subtitle: String? = nil
+    let recordID: UUID
+    let side: MangoImageStore.Side
+
+    @State private var image: UIImage?
+
     var body: some View {
         VStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.gray)
-            
-            // Image asset with color block fallback
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .background(Color.blue.opacity(0.2))
-                .cornerRadius(16)
-                .clipped()
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.gray)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray.opacity(0.8))
+                }
+            }
+
+            Group {
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    placeholder
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 180)
+            .background(Color(red: 240/255, green: 240/255, blue: 243/255))
+            .cornerRadius(16)
+            .clipped()
         }
+        // `id:` supaya kotak ikut memuat ulang ketika operator memilih kode
+        // mangga lain di sidebar, bukan menahan foto record sebelumnya.
+        .task(id: recordID) {
+            image = MangoImageStore.shared.image(id: recordID, side: side)
+        }
+    }
+
+    private var placeholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "photo")
+                .font(.system(size: 28))
+                .foregroundColor(.gray.opacity(0.5))
+
+            Text("Foto tidak tersedia")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

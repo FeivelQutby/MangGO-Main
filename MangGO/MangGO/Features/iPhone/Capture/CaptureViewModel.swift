@@ -304,15 +304,23 @@ final class CaptureViewModel {
 
         counts[evaluated.grade.displayCode, default: 0] += 1
 
-        // Foto dokumentasi hanya untuk mangga reject: crop dari kedua capture
-        // asli (atas = photo1, bawah = photo2), fallback ke frame live.
+        // Foto dokumentasi hanya untuk mangga reject: satu per sisi, dari kedua
+        // capture asli (sisi A = depan/photo1, sisi B = belakang/photo2).
         var imageA: Data? = nil
         var imageB: Data? = nil
 
         if evaluated.grade == .rejected {
-            let fallback: VisionInput? = camera.latestFrame.map { VisionInput.pixelBuffer($0) }
-            let sideAInput = photo1.map { VisionInput.pixelBuffer($0) } ?? fallback
-            let sideBInput = photo2.map { VisionInput.pixelBuffer($0) } ?? sideAInput
+            // Frame live dipakai sebagai cadangan untuk sisi mana pun yang
+            // capture-nya tidak sempat masuk. Sengaja BUKAN "sisi B jatuh ke
+            // input sisi A": itu menghasilkan dua berkas identik yang terlihat
+            // seperti dokumentasi dua sisi padahal isinya satu sisi yang sama.
+            // Lebih baik satu sisi kosong dan terlihat kosong di detail view.
+            let live: VisionInput? = camera.latestFrame.map { VisionInput.pixelBuffer($0) }
+            let sideAInput = photo1.map { VisionInput.pixelBuffer($0) } ?? live
+            let sideBInput = photo2.map { VisionInput.pixelBuffer($0) } ?? live
+
+            if photo1 == nil { print("⚠️ Foto sisi A memakai frame live — capture 1 tidak ada") }
+            if photo2 == nil { print("⚠️ Foto sisi B memakai frame live — capture 2 tidak ada") }
 
             // SISI B ("bawah") sering gagal diisolasi karena mangga jauh/kecil di
             // mangkuk. Kalau gagal, jangan pakai frame penuh — crop tetap ke area
@@ -323,6 +331,9 @@ final class CaptureViewModel {
             }
 
             print("🖼️ Reject photos — A: \(imageA?.count ?? 0)B, B: \(imageB?.count ?? 0)B")
+
+            if imageA == nil { print("⚠️ Foto reject sisi A gagal dibuat") }
+            if imageB == nil { print("⚠️ Foto reject sisi B gagal dibuat") }
         }
 
         publish(
