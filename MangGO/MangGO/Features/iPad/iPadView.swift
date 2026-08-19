@@ -172,7 +172,8 @@ struct iPadView: View {
             grade: grade,
             weightGrams: result.weightGrams ?? 0,
             defectPercent: result.defectPercent ?? 0,
-            rejectionReason: result.reason
+            rejectionReason: result.reason,
+            color: result.color
         )
 
         recordStore.add(record)

@@ -165,37 +165,9 @@ struct RejectedMangoDetailView: View {
                                 .foregroundColor(.black)
                             
                             HStack(spacing: 16) {
-                                RejectCauseCard(
-                                    title: "berat",
-                                    icon: "scalemass",
-                                    value: "\(Int(selectedRecord.weightGrams)) gram",
-                                    statusIcon: "xmark.circle.fill",
-                                    statusText: selectedRecord.weightStatus,
-                                    badgeColor: Color(red: 253/255, green: 238/255, blue: 240/255),
-                                    textColor: Color(red: 180/255, green: 40/255, blue: 50/255)
-                                )
-                                
-                                RejectCauseCard(
-                                    title: "blush",
-                                    icon: "flag.fill",
-                                    value: "\(Int(selectedRecord.defectPercent))%",
-                                    statusIcon: "arrow.up.right",
-                                    statusText: "bintik/defek terlalu tinggi",
-                                    badgeColor: Color(red: 253/255, green: 238/255, blue: 240/255),
-                                    textColor: Color(red: 180/255, green: 40/255, blue: 50/255)
-                                )
-                                
-                                // di sini
-                                RejectCauseCard(
-                                    title: "warna",
-                                    icon: "circle.fill",
-                                    iconColor: .yellow,
-                                    value: "kuning",
-                                    statusIcon: "exclamationmark.triangle.fill",
-                                    statusText: "mangga terlalu matang",
-                                    badgeColor: Color(red: 253/255, green: 238/255, blue: 240/255),
-                                    textColor: Color(red: 180/255, green: 40/255, blue: 50/255)
-                                )
+                                weightCard
+                                defectCard
+                                colorCard
                             }
                         }
                     }
@@ -215,6 +187,89 @@ struct RejectedMangoDetailView: View {
             MangoPhotoViewerView(preview: item) {
                 preview = nil
             }
+        }
+    }
+
+    // MARK: - Kartu Penyebab Reject
+    //
+    // Ambang ketiga kartu dibaca dari `GradingStandard.harumManis`, bukan
+    // ditulis ulang sebagai angka baru di sini. Kalau standarnya diubah, badge
+    // ikut berubah sendiri — tidak ada versi kedua yang bisa diam-diam melenceng
+    // dari mesin grading yang sebenarnya memutuskan.
+
+    private var standard: GradingStandard { .harumManis }
+
+    private var weightCard: some View {
+        let grams = selectedRecord.weightGrams
+        let severity: CauseSeverity =
+            grams < standard.minMassDisqualification ? .critical
+            : grams < 350 ? .caution
+            : .normal
+
+        return RejectCauseCard(
+            title: "berat",
+            icon: "scalemass",
+            value: "\(Int(grams)) gram",
+            statusText: selectedRecord.weightStatus,
+            severity: severity
+        )
+    }
+
+    /// Kartu ini dulu berjudul "blush" padahal isinya `defectPercent` — luas
+    /// bintik, bukan blush. Judulnya diluruskan supaya tidak bertabrakan dengan
+    /// kartu warna di sebelahnya, yang sekarang benar-benar melaporkan blush.
+    private var defectCard: some View {
+        let percent = selectedRecord.defectPercent
+        let severity: CauseSeverity =
+            percent > standard.maxDefectDisqualification ? .critical
+            : percent > 15 ? .caution
+            : .normal
+
+        let status: String
+        switch severity {
+        case .critical:
+            status = String(
+                format: "melebihi ambang %.0f%%",
+                standard.maxDefectDisqualification
+            )
+        case .caution: status = "bintik cukup banyak"
+        default: status = "dalam batas"
+        }
+
+        return RejectCauseCard(
+            title: "bintik / defek",
+            icon: "circle.dotted",
+            value: String(format: "%.0f%%", percent),
+            statusText: status,
+            severity: severity
+        )
+    }
+
+    @ViewBuilder
+    private var colorCard: some View {
+        if let color = selectedRecord.color {
+            RejectCauseCard(
+                title: "warna",
+                icon: "circle.fill",
+                // Titiknya memakai warna yang benar-benar terukur. Kalau
+                // terlihat abu-abu atau biru, itu bukan bug tampilan — itu
+                // tanda mask menangkap sesuatu yang bukan kulit buah.
+                iconColor: color.swatch,
+                value: color.displayName,
+//                detail: String(format: "blush %.0f%%", color.blushCoverage),
+                statusText: color.ripeness.label,
+                severity: color.ripeness.isProblem ? .critical : .normal
+            )
+        } else {
+            // Record lama, disimpan sebelum warna ikut dikirim dari iPhone.
+            // Ditulis apa adanya, bukan ditebak.
+            RejectCauseCard(
+                title: "warna",
+                icon: "circle.dashed",
+                value: "—",
+                statusText: "data warna belum tersedia",
+                severity: .unknown
+            )
         }
     }
 }
@@ -378,42 +433,100 @@ struct MangoPhotoViewerView: View {
     }
 }
 
+/// Seberapa serius satu indikator, dan bagaimana badge-nya terlihat.
+///
+/// Dulu tiap kartu dititipi `badgeColor`, `textColor`, dan `statusIcon` sendiri,
+/// dan ketiganya selalu diisi merah — jadi indikator yang nilainya baik pun
+/// tampil seperti penyebab reject. Sekarang tampilannya turunan dari datanya.
+enum CauseSeverity {
+    /// Nilai di dalam standar.
+    case normal
+    /// Masih diterima tapi mendekati batas.
+    case caution
+    /// Melewati batas — inilah yang benar-benar menolak buah.
+    case critical
+    /// Tidak ada datanya. Bukan bagus, bukan jelek.
+    case unknown
+
+    var icon: String {
+        switch self {
+        case .normal: "checkmark.circle.fill"
+        case .caution: "arrow.up.right"
+        case .critical: "xmark.circle.fill"
+        case .unknown: "questionmark.circle"
+        }
+    }
+
+    var textColor: Color {
+        switch self {
+        case .normal: Color(red: 15/255, green: 110/255, blue: 45/255)
+        case .caution: Color(red: 138/255, green: 98/255, blue: 12/255)
+        case .critical: Color(red: 180/255, green: 40/255, blue: 50/255)
+        case .unknown: Color(red: 114/255, green: 114/255, blue: 114/255)
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .normal: Color(red: 236/255, green: 248/255, blue: 241/255)
+        case .caution: Color(red: 254/255, green: 248/255, blue: 235/255)
+        case .critical: Color(red: 253/255, green: 238/255, blue: 240/255)
+        case .unknown: Color(red: 242/255, green: 242/255, blue: 247/255)
+        }
+    }
+}
+
 struct RejectCauseCard: View {
     let title: String
     let icon: String
     var iconColor: Color = .gray
     let value: String
-    let statusIcon: String
+
+    /// Baris kecil di bawah nilai utama, untuk angka pendamping seperti blush.
+    var detail: String? = nil
+
     let statusText: String
-    let badgeColor: Color
-    let textColor: Color
-    
+    let severity: CauseSeverity
+
     var body: some View {
         VStack(spacing: 10) {
             Text(title)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundColor(.gray)
-            
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(iconColor)
-                
-                Text(value)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.black)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            VStack(spacing: 2) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18))
+                        .foregroundColor(iconColor)
+
+                    Text(value)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.black)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
             }
-            
+
             HStack(spacing: 4) {
-                Image(systemName: statusIcon)
+                Image(systemName: severity.icon)
                     .font(.system(size: 10, weight: .bold))
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
+                    .multilineTextAlignment(.center)
             }
-            .foregroundColor(textColor)
+            .foregroundColor(severity.textColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(badgeColor)
+            .background(severity.badgeColor)
             .cornerRadius(8)
         }
         .padding(.vertical, 16)

@@ -216,6 +216,7 @@ final class CaptureViewModel {
             score: result.totalScore,
             weightGrams: sample.mass,
             defectPercent: sample.spotCoverage,
+            color: sample.color,
             gradedAt: result.evaluatedAt,
             imageA: imageA,
             imageB: imageB
