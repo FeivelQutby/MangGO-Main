@@ -47,8 +47,41 @@ final class CaptureViewModel {
     /// kotak; width,height = ukuran; semua fraksi 0…1).
     static let bowlFallbackCrop = CGRect(x: 0.12, y: 0.48, width: 0.52, height: 0.42)
 
+    /// Jeda sebelum exposure & white balance dibekukan otomatis.
+    ///
+    /// AE/AWB butuh beberapa frame untuk konvergen setelah sesi mulai. Mengunci
+    /// terlalu cepat justru membekukan nilai sementara yang masih salah, dan
+    /// seluruh batch akan memakai eksposur yang keliru.
+    static let colorLockDelay = Duration.milliseconds(1500)
+
+    /// Ambang kewajaran satu sisi.
+    ///
+    /// Sisi yang gagal salah satu syarat ini pengukuran bintiknya dibuang, dan
+    /// sisi itu diperlakukan sebagai "tidak ada data bintik" — bukan sebagai
+    /// hasil terburuk. Fusi worst-of hanya boleh mempertimbangkan pembacaan yang
+    /// bisa dipercaya; tanpa penjaga ini cukup SATU sisi salah baca untuk
+    /// menolak buah yang bagus.
+    enum SideSanity {
+        /// Siluet yang lebih kecil dari ini hampir pasti bukan buah utuh — bisa
+        /// pecahan mask atau benda lain. Karena `spotCoverage` MEMBAGI dengan
+        /// angka ini, penyebut sekecil itu membuat persentase meledak.
+        static let minFruitAreaRatio = 0.08
+
+        /// Luas bintik tidak mungkin melebihi luas buah. Kalau terjadi, yang
+        /// salah pengukurannya, bukan buahnya.
+        static let maxRawSpotCoverage = 100.0
+
+        /// Sebagian besar deteksi jatuh di latar → framing atau mask-nya
+        /// meragukan, jadi sisa deteksi yang lolos juga tidak bisa dipercaya.
+        static let maxRejectedShare = 0.6
+    }
+
     private var ble: BLEManager?
     private var cancellables = Set<AnyCancellable>()
+
+    /// Kunci warna hanya sekali per sesi. Mengunci ulang tiap siklus akan
+    /// mengembalikan variasi antar buah — persis yang mau dihilangkan.
+    @ObservationIgnored private var didLockColorSettings = false
     
     
     @ObservationIgnored
@@ -201,11 +234,32 @@ final class CaptureViewModel {
         do {
             try await camera.start()
             phase = .ready
+            lockColorSettingsWhenSettled()
         } catch {
             errorMessage = error.localizedDescription
             phase = .accessDenied
         }
         publish(.idle)
+    }
+
+    /// Membekukan exposure & white balance sendiri begitu preview stabil.
+    ///
+    /// `CameraSession.lockColorSettings()` sudah lama ada tapi tidak pernah
+    /// dipanggil siapa pun, jadi AE/AWB berjalan bebas sepanjang batch. Efeknya
+    /// menjalar ke mana-mana: suhu warna yang bergeser mengubah hue, saturasi,
+    /// dan `blushCoverage`; eksposur yang bergeser mengubah kilau kulit, yang
+    /// mengubah jumlah kotak yang dikeluarkan detektor DAN bentuk siluet yang
+    /// diangkat Vision. Buah yang sama bisa dapat angka berbeda hanya karena
+    /// diambil beberapa detik kemudian.
+    private func lockColorSettingsWhenSettled() {
+        guard !didLockColorSettings else { return }
+        didLockColorSettings = true
+
+        Task { [camera] in
+            try? await Task.sleep(for: Self.colorLockDelay)
+            camera.lockColorSettings()
+            print("🔒 Exposure & white balance dikunci")
+        }
     }
     
     func stopCamera() {
@@ -260,13 +314,23 @@ final class CaptureViewModel {
                 var sided = sample                     // bawa id, capturedAt, mass
                 sided.defects = analysis.defects
                 sided.fruitAreaRatio = analysis.fruitAreaRatio
+                sided.defectAreaRatio = analysis.defectAreaRatio
                 sided.color = analysis.color
 
-                let spot = sided.spotCoverage ?? 0
                 print("🔍 Sisi \(side.name): \(analysis.defects.count) bintik, " +
                       "area \(String(format: "%.1f%%", analysis.fruitAreaRatio * 100)), " +
-                      "spot \(String(format: "%.1f%%", spot)), " +
+                      "spot \(String(format: "%.1f%%", sided.rawSpotCoverage ?? 0)), " +
                       "buang \(analysis.rejectedDetections)")
+
+                // Pengukuran bintik yang tidak masuk akal dibuang, tapi HANYA
+                // angka bintiknya — warna dan berat sisi ini tetap dipakai.
+                // `defectAreaRatio = nil` membuat `spotCoverage` ikut nil,
+                // sehingga kriteria defek dilewati dan diskualifikasi 30% tidak
+                // bisa menyala dari data yang memang tidak dipercaya.
+                if let issue = sanityIssue(for: sided, analysis: analysis) {
+                    print("⚠️ Sisi \(side.name): pengukuran bintik diabaikan — \(issue)")
+                    sided.defectAreaRatio = nil
+                }
 
                 guard let graded = engine.evaluate(sided) else { continue }
                 candidates.append((sided, graded, analysis.rejectedDetections))
@@ -304,23 +368,15 @@ final class CaptureViewModel {
 
         counts[evaluated.grade.displayCode, default: 0] += 1
 
-        // Foto dokumentasi hanya untuk mangga reject: satu per sisi, dari kedua
-        // capture asli (sisi A = depan/photo1, sisi B = belakang/photo2).
+        // Foto dokumentasi hanya untuk mangga reject: crop dari kedua capture
+        // asli (atas = photo1, bawah = photo2), fallback ke frame live.
         var imageA: Data? = nil
         var imageB: Data? = nil
 
         if evaluated.grade == .rejected {
-            // Frame live dipakai sebagai cadangan untuk sisi mana pun yang
-            // capture-nya tidak sempat masuk. Sengaja BUKAN "sisi B jatuh ke
-            // input sisi A": itu menghasilkan dua berkas identik yang terlihat
-            // seperti dokumentasi dua sisi padahal isinya satu sisi yang sama.
-            // Lebih baik satu sisi kosong dan terlihat kosong di detail view.
-            let live: VisionInput? = camera.latestFrame.map { VisionInput.pixelBuffer($0) }
-            let sideAInput = photo1.map { VisionInput.pixelBuffer($0) } ?? live
-            let sideBInput = photo2.map { VisionInput.pixelBuffer($0) } ?? live
-
-            if photo1 == nil { print("⚠️ Foto sisi A memakai frame live — capture 1 tidak ada") }
-            if photo2 == nil { print("⚠️ Foto sisi B memakai frame live — capture 2 tidak ada") }
+            let fallback: VisionInput? = camera.latestFrame.map { VisionInput.pixelBuffer($0) }
+            let sideAInput = photo1.map { VisionInput.pixelBuffer($0) } ?? fallback
+            let sideBInput = photo2.map { VisionInput.pixelBuffer($0) } ?? sideAInput
 
             // SISI B ("bawah") sering gagal diisolasi karena mangga jauh/kecil di
             // mangkuk. Kalau gagal, jangan pakai frame penuh — crop tetap ke area
@@ -331,9 +387,6 @@ final class CaptureViewModel {
             }
 
             print("🖼️ Reject photos — A: \(imageA?.count ?? 0)B, B: \(imageB?.count ?? 0)B")
-
-            if imageA == nil { print("⚠️ Foto reject sisi A gagal dibuat") }
-            if imageB == nil { print("⚠️ Foto reject sisi B gagal dibuat") }
         }
 
         publish(
@@ -342,6 +395,41 @@ final class CaptureViewModel {
         )
     }
     
+    /// Alasan kenapa pengukuran bintik satu sisi tidak bisa dipercaya, atau
+    /// `nil` kalau wajar.
+    ///
+    /// Ketiga syaratnya menyasar mode kegagalan yang berbeda: siluet terlalu
+    /// kecil = penyebut runtuh, cakupan > 100% = pembilang rusak, mayoritas
+    /// deteksi terbuang = framing atau mask-nya salah sejak awal.
+    private func sanityIssue(for sample: MangoSample, analysis: DefectAnalysis) -> String? {
+        if analysis.fruitAreaRatio < SideSanity.minFruitAreaRatio {
+            return String(
+                format: "siluet buah cuma %.1f%% frame (min %.0f%%)",
+                analysis.fruitAreaRatio * 100,
+                SideSanity.minFruitAreaRatio * 100
+            )
+        }
+
+        if let raw = sample.rawSpotCoverage, raw > SideSanity.maxRawSpotCoverage {
+            return String(format: "luas bintik %.0f%% dari luas buah — mustahil", raw)
+        }
+
+        let total = analysis.defects.count + analysis.rejectedDetections
+        if total > 0 {
+            let rejectedShare = Double(analysis.rejectedDetections) / Double(total)
+            if rejectedShare > SideSanity.maxRejectedShare {
+                return String(
+                    format: "%.0f%% deteksi jatuh di latar (%d dari %d)",
+                    rejectedShare * 100,
+                    analysis.rejectedDetections,
+                    total
+                )
+            }
+        }
+
+        return nil
+    }
+
     func reset() {
         sample = MangoSample()
         result = nil

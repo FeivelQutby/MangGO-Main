@@ -13,17 +13,43 @@ struct MangoSample: Identifiable, Codable, Hashable, Sendable {
     /// Luas siluet buah relatif terhadap frame, dari segmentasi.
     var fruitAreaRatio: Double?
 
+    /// Luas bintik relatif terhadap frame, hasil pengukuran piksel di
+    /// `DefectPipeline`: union kotak deteksi yang diiris siluet buah.
+    ///
+    /// `nil` berarti **belum diukur**, bukan "tidak ada bintik" — dan itu
+    /// membuat `spotCoverage` ikut `nil`, sehingga kriteria defek dilewati sama
+    /// seperti berat yang belum masuk. Sengaja begitu: pembacaan yang tidak
+    /// dipercaya tidak boleh dipakai menolak buah.
+    var defectAreaRatio: Double?
+
     var color: ColorProfile?
     var dimensions: Dimensions?
     var mass: Grams?
 }
 
 extension MangoSample {
-    /// Luas bintik relatif terhadap permukaan buah, bukan terhadap frame.
+    /// Luas bintik relatif terhadap permukaan buah, bukan terhadap frame,
+    /// dibatasi 100%.
+    ///
+    /// Dulu pembilangnya `Σ luas kotak deteksi`. Itu menghitung kotak yang
+    /// bertumpuk berkali-kali dan ikut menghitung bagian kotak yang jatuh di
+    /// latar, jadi angkanya bisa jauh melebihi luas buah — sementara batas
+    /// `min(…, 1)` menyembunyikan seberapa jauh melesetnya. Sekarang
+    /// pembilangnya luas piksel yang benar-benar terukur di dalam siluet.
     var spotCoverage: Percentage? {
-        guard let fruitAreaRatio, fruitAreaRatio > 0 else { return nil }
-        let defectArea = defects.reduce(0) { $0 + $1.frameAreaRatio }
-        return min(defectArea / fruitAreaRatio, 1) * 100
+        guard let ratio = rawSpotCoverage else { return nil }
+        return min(ratio, 100)
+    }
+
+    /// `spotCoverage` tanpa dibatasi 100%.
+    ///
+    /// Nilai di atas 100% mustahil secara fisik — luas bintik tidak bisa
+    /// melebihi luas buah — jadi ini dipakai sebagai alarm bahwa yang rusak
+    /// pengukurannya, bukan buahnya. Angka yang sudah dibatasi tidak bisa
+    /// membedakan 100% dari 400%.
+    var rawSpotCoverage: Percentage? {
+        guard let fruitAreaRatio, fruitAreaRatio > 0, let defectAreaRatio else { return nil }
+        return defectAreaRatio / fruitAreaRatio * 100
     }
 
     var volume: CubicCentimeters? {

@@ -142,6 +142,60 @@ struct PixelMask: Sendable {
         return total > 0 ? Double(filled) / Double(total) : 0
     }
 
+    /// Jumlah piksel **terisi** yang tertutup setidaknya satu kotak di `rects`.
+    ///
+    /// Ini pengganti `Σ (lebar × tinggi)` sebagai ukuran luas bintik, dan dua
+    /// bedanya bukan kosmetik:
+    ///
+    /// - **Union, bukan penjumlahan.** Kotak yang saling bertumpuk dulu dihitung
+    ///   berkali-kali, jadi satu bintik yang dideteksi berulang bisa melaporkan
+    ///   luas beberapa kali lipat dari luas fisiknya.
+    /// - **Diiris dengan mask.** Bagian kotak yang menjulur ke latar — dudukan,
+    ///   kabel, tepi wadah — tidak lagi ikut terhitung sebagai bintik di
+    ///   permukaan buah. `coverage(in:)` hanya memutuskan sebuah kotak dibuang
+    ///   atau tidak; begitu lolos, dulu seluruh luasnya masuk hitungan.
+    ///
+    /// Dipanggil dengan siluet yang **belum dikikis**, supaya pembilang dan
+    /// penyebut `spotCoverage` diukur pada siluet yang sama.
+    func filledPixelCount(coveredByAnyOf rects: [CGRect]) -> Int {
+        guard !rects.isEmpty else { return 0 }
+
+        var counted = [Bool](repeating: false, count: pixelCount)
+        var total = 0
+
+        for rect in rects {
+            guard let region = pixelRegion(for: rect) else { continue }
+            for row in region.rows {
+                let offset = row * width
+                for x in region.columns {
+                    let index = offset + x
+                    guard values[index] > 0, !counted[index] else { continue }
+                    counted[index] = true
+                    total += 1
+                }
+            }
+        }
+
+        return total
+    }
+
+    /// Gabungan dua mask berukuran sama. Dipakai menyatukan pecahan siluet buah
+    /// yang diangkat Vision sebagai instance terpisah.
+    ///
+    /// Ukuran yang tidak cocok dikembalikan apa adanya, bukan di-crash: kedua
+    /// mask selalu berasal dari satu `instanceMask` yang sama, jadi ukuran beda
+    /// berarti bug di pemanggil — dan menggagalkan satu siklus grading lebih
+    /// buruk daripada melewatkan satu penggabungan.
+    func union(_ other: PixelMask) -> PixelMask {
+        guard other.width == width, other.height == height else { return self }
+
+        var merged = values
+        for index in 0..<merged.count where other.values[index] > 0 {
+            merged[index] = 255
+        }
+        return PixelMask(width: width, height: height, values: merged)
+    }
+
     /// Mengikis tepi mask `radius` piksel dengan min-filter 3x3 berulang.
     ///
     /// Tepi siluet selalu mengandung piksel latar; tanpa dikikis, deteksi yang

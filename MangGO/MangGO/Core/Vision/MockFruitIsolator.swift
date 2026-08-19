@@ -18,6 +18,7 @@ struct MockFruitIsolator: FruitIsolating {
             areaRatio: areaRatio,
             color: color,
             mask: .filled(width: 32, height: 32),
+            silhouette: .filled(width: 32, height: 32),
             candidateCount: 1
         )
     }
